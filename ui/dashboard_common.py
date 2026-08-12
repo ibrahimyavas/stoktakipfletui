@@ -1,6 +1,13 @@
-"""Üretim Kayıt Defteri — PySide6 sürümündeki page_defter.py'nin Flet
-karşılığı. Aynı iş mantığı (core/stock_logic.py) birebir kullanılıyor;
-sadece arayüz katmanı Flet'in deklaratif kontrolleriyle yeniden yazıldı."""
+"""Kayıt Defteri — ortak taban sınıfı. Üretim ve Satış rollerinin kendi
+dashboard'ları (`ui/page_dashboard_uretim.py`, `ui/page_dashboard_satis.py`)
+burayı miras alır; aralarındaki TEK fark hangi "miktar" sekmelerinin
+görüneceğidir (`show_uretim_fire` / `show_satis` bayrakları). Kaydetme,
+silme, stok zinciri, kilit, arama/tablo gibi tüm iş mantığı (rolden
+bağımsız, PySide6 sürümüyle birebir aynı) burada tek yerde yaşıyor —
+rol başına ayrı dosyada tekrar tekrar yazılmıyor.
+
+Admin rolü de doğrudan bu sınıfı (her iki bayrak da açık) kullanıyor, çünkü
+tüm alanlara erişimi var."""
 
 from __future__ import annotations
 
@@ -40,12 +47,27 @@ def _num(tf: ft.TextField) -> float:
         return 0.0
 
 
-class DefterPage:
-    def __init__(self, page: ft.Page, state: AppState, profile_role: str, on_saving=None):
+class DashboardBase:
+    def __init__(
+        self,
+        page: ft.Page,
+        state: AppState,
+        profile_role: str,
+        on_saving=None,
+        *,
+        show_uretim_fire: bool,
+        show_satis: bool,
+    ):
         self.page = page
         self.state = state
         self.profile_role = profile_role
         self.on_saving = on_saving or (lambda saving: None)
+        # Bu iki bayrak, eskiden dosyanın 5 farklı yerine dağılmış
+        # "if profile_role in (...)" kontrollerinin yerini alıyor — Üretim
+        # ve Satış dashboard'ları bunları sabit değer olarak veriyor, Admin
+        # ikisini de açık veriyor.
+        self.show_uretim_fire = show_uretim_fire
+        self.show_satis = show_satis
         self.editing_id: str | None = None
         self._starting_stock_locked = False
 
@@ -137,7 +159,7 @@ class DefterPage:
         tab_headers: list[ft.Tab] = []
         tab_bodies: list[ft.Control] = []
 
-        if self.profile_role in ("uretim", "admin"):
+        if self.show_uretim_fire:
             tab_headers.append(ft.Tab(label="Üretim / Fire"))
             tab_bodies.append(
                 ft.Container(
@@ -157,7 +179,7 @@ class DefterPage:
                     padding=12,
                 )
             )
-        if self.profile_role in ("satis", "admin"):
+        if self.show_satis:
             tab_headers.append(ft.Tab(label="Satış"))
             tab_bodies.append(
                 ft.Container(
@@ -210,7 +232,7 @@ class DefterPage:
 
     def _table_columns(self) -> list[ft.DataColumn]:
         cols = ["Tarih", "Ürün"]
-        if self.profile_role != "satis":
+        if self.show_uretim_fire:
             cols += ["Üretim", "Fire"]
         cols += ["Satış / ID", "Açılış", "Bitiş", "İşlem"]
         return [ft.DataColumn(ft.Text(c)) for c in cols]
@@ -250,7 +272,7 @@ class DefterPage:
         data_rows = []
         for r in rows:
             cells = [ft.DataCell(ft.Text(format_date_tr(r.get("tarih")))), ft.DataCell(ft.Text(f"{r.get('urunAdi')} ({r.get('urunKodu')})"))]
-            if self.profile_role != "satis":
+            if self.show_uretim_fire:
                 cells.append(ft.DataCell(ft.Text(f"{format_number(r.get('uretimTeneke'))} T / {format_number(r.get('uretimKg'))} Kg")))
                 cells.append(ft.DataCell(ft.Text(f"{format_number(r.get('fireTeneke'))} T / {format_number(r.get('fireKg'))} Kg")))
             satis_text = f"{format_number(r.get('satisTeneke'))} T / {format_number(r.get('satisKg'))} Kg"
@@ -325,7 +347,7 @@ class DefterPage:
             self.baslangic_adet.value = str(prev.get("bitisStokAdet") or 0)
 
     def _apply_lock(self, code: str) -> None:
-        locked = has_locked_starting_stock(self.state.records, code) and self.profile_role in ("uretim", "admin")
+        locked = has_locked_starting_stock(self.state.records, code) and self.show_uretim_fire
         self._starting_stock_locked = locked
         for tf in (self.baslangic_teneke, self.baslangic_kg, self.baslangic_adet):
             tf.read_only = locked
@@ -423,7 +445,7 @@ class DefterPage:
 
         old_record = next((r for r in self.state.records if r["id"] == self.editing_id), None) if self.editing_id else None
 
-        if self.profile_role in ("uretim", "admin"):
+        if self.show_uretim_fire:
             manual_baslangic_stok = True
         else:
             manual_baslangic_stok = bool(old_record.get("manualBaslangicStok")) if old_record else False

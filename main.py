@@ -18,7 +18,9 @@ from core.app_state import AppState
 from core.db_core import DbCore
 from core.models import PAGE_LABELS, PROFILES
 from core.settings import AppSettings, load_settings, save_settings
-from ui.page_defter import DefterPage
+from ui.dashboard_common import DashboardBase
+from ui.page_dashboard_satis import SatisDashboard
+from ui.page_dashboard_uretim import UretimDashboard
 from ui.page_genel import GenelPage
 from ui.profile_selector import build_profile_selector
 from ui.theme import apply_theme
@@ -103,7 +105,19 @@ def _show_main_shell(page: ft.Page, state: AppState, role_key: str, prefs: ft.Sh
     page_bodies: list[ft.Control] = []
     for page_key in info.pages:
         if page_key == "defter":
-            body = DefterPage(page, state, role_key, on_saving=set_saving).control
+            # Üretim ve Satış artık tamamen ayrı dashboard sınıfları
+            # (page_dashboard_uretim.py / page_dashboard_satis.py) — birbirinin
+            # alanlarını hiç görmüyor. Admin ikisine de aynı anda erişmesi
+            # gerektiği için ortak taban sınıfı DashboardBase'i doğrudan, her
+            # iki bayrak da açık şekilde kullanıyor.
+            if role_key == "uretim":
+                body = UretimDashboard(page, state, on_saving=set_saving).control
+            elif role_key == "satis":
+                body = SatisDashboard(page, state, on_saving=set_saving).control
+            else:
+                body = DashboardBase(
+                    page, state, role_key, on_saving=set_saving, show_uretim_fire=True, show_satis=True
+                ).control
         elif page_key == "genel":
             body = GenelPage(page, state).control
         else:

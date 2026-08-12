@@ -9,9 +9,15 @@ ile gerçek bir Android uygulaması olarak paketlenebiliyor.
 
 - **Rol seçimi** (Üretim / Satış / Admin) — `core/models.py`'deki `PROFILES`
   ile PySide6 sürümüyle birebir aynı erişim kuralları.
-- **Üretim Kayıt Defteri** — kayıt ekle/düzenle/sil, ürün hızlı seçimi,
-  stok zinciri (`core/stock_logic.py` — PySide6 sürümüyle **birebir aynı
-  dosya**), başlangıç stoğu kilidi, rol bazlı sekmeler.
+- **Üretim ve Satış tamamen ayrı dashboard'lar** — `ui/page_dashboard_uretim.py`
+  (`UretimDashboard`) sadece üretim/fire alanlarını, `ui/page_dashboard_satis.py`
+  (`SatisDashboard`) sadece satış alanlarını içeriyor; birbirinin
+  alanlarını/mantığını hiç görmüyor. Kayıt ekle/düzenle/sil, ürün hızlı
+  seçimi, stok zinciri (`core/stock_logic.py` — PySide6 sürümüyle **birebir
+  aynı dosya**), başlangıç stoğu kilidi gibi rol-bağımsız ortak mantık
+  `ui/dashboard_common.py`'deki `DashboardBase`'te tek yerde yaşıyor (iki
+  dosyaya kopyalanmıyor). Admin, her iki bayrağı da açık şekilde doğrudan
+  `DashboardBase`'i kullanıyor, yani tüm alanlara tek ekranda erişiyor.
 - **Genel Tablo + YENİ filtreleme özelliği**: firma, ürün, tarih aralığı ve
   serbest metin araması — hepsi birlikte, birleşik olarak uygulanıyor. CSV
   export da var (`FilePicker.save_file` ile — web/Android'de de çalışacak
@@ -21,7 +27,9 @@ ile gerçek bir Android uygulaması olarak paketlenebiliyor.
 - **Tema**: Material 3 `color_scheme_seed` ile açık/koyu + serbest aksan
   rengi (PySide6 sürümündeki elle-XML-üretme yerine yerleşik).
 
-**Henüz yok** (kanıt onaylanınca eklenecek): Satış, Rapor, Barkod
+**Henüz yok** (kanıt onaylanınca eklenecek): "Satışlar & Firmalar" sayfası
+(firma yönetimi, bekleyen satışlar, Satışı Tamamla diyaloğu — Kayıt
+Defteri'ndeki satış girişinden farklı, ayrı bir ekran), Rapor, Barkod
 Eşleştirme, İrsaliye Arşivi (+OCR), Sheets senkron, Ayarlar'ı sonradan
 düzenleme ekranı.
 
@@ -94,6 +102,15 @@ flet run --web main.py
   Genel Tablo (gerçek Turso verisiyle, filtreler dahil) — hepsi Playwright
   ekran görüntüleriyle, gerçek Turso veritabanına karşı doğrulandı, hiçbir
   hata banner'ı çıkmadı.
+- ✅ **Üretim/Satış dashboard ayrımı doğrulandı** — hem mantık testleriyle
+  (`UretimDashboard`'da sekme sayısı 2 ve `show_satis=False`, `SatisDashboard`'da
+  2 ve `show_uretim_fire=False`, admin'de 3; `manual_baslangic_stok`
+  bayrağının iki dashboard'da da doğru davrandığı gerçek DB'ye karşı ayrı
+  ayrı test edildi) hem de Playwright ekran görüntüleriyle: Üretim rolü artık
+  üstte sadece "Kayıt Defteri" + "Haftalık/Aylık Rapor" sekmelerini, Kayıt
+  Defteri içinde sadece "Üretim / Fire" + "Stok & Fiyat" sekmelerini
+  görüyor (Satış'a hiç erişimi yok) — Satış rolü de simetrik şekilde
+  sadece kendi alanlarını görüyor.
 
 ## Sıradaki adım
 
