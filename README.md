@@ -50,23 +50,29 @@ pencere açılır (`flet run` ile aynı); web önizlemesi için:
 flet run --web main.py
 ```
 
-## Bu depoda ne test edildi, ne edilemedi
-
-Geliştirme ortamının (bu konuşmanın çalıştığı sandbox) headless-chromium'u,
-Flet'in kullandığı Flutter/CanvasKit WASM motorunu başlatamadı — bu **kod
-hatası değil**, sandbox'a özgü bir kısıt (sunucu tarafı HTTP 200 dönüyor,
-istemci tarafı hiç bağlanamıyor). Bu yüzden:
+## Bu depoda ne test edildi
 
 - ✅ **Tüm iş mantığı** (kayıt kaydetme/düzenleme/silme, stok zinciri,
   başlangıç stoğu kilidi, YENİ filtreleme özelliğinin 5 senaryosu) gerçek
   Turso veritabanına karşı `page=None` ile (Flet çalışma zamanı olmadan,
   doğrudan Python fonksiyon çağrılarıyla) test edildi, hepsi geçti.
-- ✅ Bu süreçte **3 gerçek Flet API uyumsuzluğu** bulunup düzeltildi
-  (`Dropdown(on_change=...)` → `on_select`; `Tab(text=...)` → `label`;
-  `Tab(content=...)` artık yok, içerik `TabBarView` ile ayrı veriliyor).
-  Bunlar test edilmeseydi, uygulama ilk açılışta çökerdi.
-- ⚠️ **Görsel/etkileşimli doğrulama henüz yapılmadı** — `flet run` ile
-  gerçek bir ekranda (senin bilgisayarında) denenmesi gerekiyor.
+- ✅ **4 gerçek Flet API/davranış hatası** bulunup düzeltildi:
+  - `Dropdown(on_change=...)` → `on_select`
+  - `Tab(text=...)` → `label`
+  - `Tab(content=...)` artık yok, içerik `TabBarView` ile ayrı veriliyor
+  - **Tarayıcı sonsuza kadar yükleme ekranında takılı kalıyordu** —
+    sebebi Flet'in varsayılan olarak CanvasKit/skwasm/font dosyalarını
+    harici bir CDN'den (`gstatic.com`) çekmeye çalışması; bu dosyalar
+    zaten yerel olarak da sunucu tarafından servis ediliyor. `main.py`'da
+    `ft.run(main, no_cdn=True)` ile düzeltildi — artık hiçbir harici ağ
+    bağlantısına ihtiyaç yok. (İlk başta bunu "sandbox'a özgü bir kısıt"
+    sandım, ama kullanıcı gerçek tarayıcısında da aynı takılmayı
+    yaşayınca gerçek bir kod hatası olduğu ortaya çıktı.)
+- ✅ **Görsel doğrulama yapıldı** — düzeltmeden sonra headless tarayıcıda
+  uygulama gerçekten render oldu (ekran görüntüsüyle doğrulandı: koyu tema,
+  "Hoş Geldiniz" ilk-açılış ayarlar ekranı düzgün görünüyor). Yine de
+  kendi bilgisayarında gerçek bir tarayıcıda son bir kez denemen faydalı
+  olur.
 
 ## Sıradaki adım
 

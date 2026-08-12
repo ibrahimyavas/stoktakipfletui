@@ -202,4 +202,10 @@ async def _save_first_run_settings(
 
 
 if __name__ == "__main__":
-    ft.run(main)
+    # no_cdn=True: Flet varsayılan olarak CanvasKit/skwasm/font dosyalarını
+    # harici bir CDN'den (gstatic.com) çekmeye çalışıyor — bu yüzden
+    # tarayıcı yükleme ekranında sonsuza kadar takılı kalıyordu (CDN'e
+    # erişim yavaş/engelliyse). Bu dosyalar zaten yerel olarak da
+    # paketleniyor; no_cdn=True ile tarayıcı bunları doğrudan bizim
+    # sunucumuzdan alır, internet bağlantısına bağımlılık kalmaz.
+    ft.run(main, no_cdn=True)
