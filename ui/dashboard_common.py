@@ -18,7 +18,7 @@ import uuid
 import flet as ft
 
 from core.app_state import AppState
-from core.models import new_record_defaults
+from core.models import PROFILES, new_record_defaults
 from core.stock_logic import (
     calculate_ending_stock,
     format_date_tr,
@@ -68,6 +68,15 @@ class DashboardBase:
         # ikisini de açık veriyor.
         self.show_uretim_fire = show_uretim_fire
         self.show_satis = show_satis
+        # Tek-rollü dashboard'lar (Üretim ya da Satış) kendi PROFILES rengini
+        # alıyor; Admin (her iki bayrak da açık) iki ayrı miktar türünü tek
+        # ekranda karıştırdığı için nötr kalıyor, kendi rengiyle işaretlenmiyor.
+        single_role = show_uretim_fire != show_satis
+        info = PROFILES.get(profile_role)
+        self.accent_color = info.color if (single_role and info) else None
+        self.dashboard_title = (
+            f"{info.label} — Kayıt Ekle / Düzenle" if (single_role and info) else "Kayıt Ekle / Düzenle"
+        )
         self.editing_id: str | None = None
         self._starting_stock_locked = False
 
@@ -108,33 +117,38 @@ class DashboardBase:
         self.save_btn = ft.FilledButton("Kaydet", on_click=self._on_save_click)
         self.cancel_btn = ft.OutlinedButton("İptal / Yeni Kayıt", on_click=lambda e: self._reset_form())
 
-        self.tabs = self._build_tabs()
+        self.form_body = self._build_form_body()
+
+        title_row: ft.Control = ft.Text(self.dashboard_title, weight=ft.FontWeight.BOLD, color=self.accent_color)
+
+        form_card = ft.Column(
+            [
+                title_row,
+                self.product_dropdown,
+                ft.ResponsiveRow(
+                    [
+                        ft.Container(self.tarih, col={"sm": 6, "md": 3}),
+                        ft.Container(self.urun_kodu, col={"sm": 6, "md": 3}),
+                        ft.Container(self.urun_adi, col={"sm": 6, "md": 3}),
+                        ft.Container(self.barcode, col={"sm": 6, "md": 3}),
+                    ]
+                ),
+                self.form_body,
+                self.lock_banner,
+                ft.Row([self.save_btn, self.cancel_btn]),
+            ],
+            spacing=10,
+        )
+        card_container = ft.Container(form_card, padding=16)
+        if self.accent_color:
+            # Tek-rollü dashboard'ları (Üretim/Satış) birbirinden görsel
+            # olarak ayırmak için PROFILES'teki rol rengiyle sol kenarlık —
+            # aynı renk zaten üst başlıkta ve rol rozetinde de kullanılıyor.
+            card_container.border = ft.Border(left=ft.BorderSide(4, self.accent_color))
 
         self.control = ft.Column(
             [
-                ft.Card(
-                    content=ft.Container(
-                        ft.Column(
-                            [
-                                ft.Text("Kayıt Ekle / Düzenle", weight=ft.FontWeight.BOLD),
-                                self.product_dropdown,
-                                ft.ResponsiveRow(
-                                    [
-                                        ft.Container(self.tarih, col={"sm": 6, "md": 3}),
-                                        ft.Container(self.urun_kodu, col={"sm": 6, "md": 3}),
-                                        ft.Container(self.urun_adi, col={"sm": 6, "md": 3}),
-                                        ft.Container(self.barcode, col={"sm": 6, "md": 3}),
-                                    ]
-                                ),
-                                self.tabs,
-                                self.lock_banner,
-                                ft.Row([self.save_btn, self.cancel_btn]),
-                            ],
-                            spacing=10,
-                        ),
-                        padding=16,
-                    )
-                ),
+                ft.Card(content=card_container),
                 ft.Container(height=8),
                 self.search_field,
                 ft.Container(content=self.table, expand=True),
@@ -146,10 +160,68 @@ class DashboardBase:
         self._refresh_product_dropdown()
         self._refresh_table()
 
-    # -- Sekmeler ------------------------------------------------------
+    # -- Form gövdesi ------------------------------------------------------
 
     def _triple_row(self, teneke, kg, adet) -> ft.Row:
         return ft.Row([teneke, kg, adet], wrap=True)
+
+    def _uretim_fire_section(self) -> ft.Control:
+        return ft.Row(
+            [
+                ft.Column([ft.Text("Üretim Miktarı", weight=ft.FontWeight.BOLD), self._triple_row(self.uretim_teneke, self.uretim_kg, self.uretim_adet)]),
+                ft.Column([ft.Text("Fire / Wastage", weight=ft.FontWeight.BOLD), self._triple_row(self.fire_teneke, self.fire_kg, self.fire_adet)]),
+            ],
+            wrap=True,
+            spacing=24,
+        )
+
+    def _satis_section(self) -> ft.Control:
+        return ft.Column(
+            [
+                ft.Text("Satış Miktarı", weight=ft.FontWeight.BOLD),
+                self._triple_row(self.satis_teneke, self.satis_kg, self.satis_adet),
+                self.satis_id,
+            ]
+        )
+
+    def _stok_fiyat_section(self) -> ft.Control:
+        return ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Column([ft.Text("Başlangıç Stoğu", weight=ft.FontWeight.BOLD), self._triple_row(self.baslangic_teneke, self.baslangic_kg, self.baslangic_adet)]),
+                        ft.Column([ft.Text("Bitiş Stoğu (otomatik)", weight=ft.FontWeight.BOLD), self.bitis_text]),
+                    ],
+                    wrap=True,
+                    spacing=24,
+                ),
+                ft.Text("Fiyat (₺)", weight=ft.FontWeight.BOLD),
+                self._triple_row(self.fiyat_teneke, self.fiyat_kg, self.fiyat_adet),
+            ]
+        )
+
+    def _build_form_body(self) -> ft.Control:
+        # Admin her iki miktar türünü de görüyor (3 bölüm) — bunları
+        # sekmelere ayırmak (yanlışlıkla üretim yaparken satış girmek gibi
+        # karışıklıkları önlemek için) hâlâ mantıklı. Tek-rollü Üretim/Satış
+        # dashboard'larında ise sadece 2 bölüm var (kendi miktar türü +
+        # Stok&Fiyat); bunları sekme arkasına gizlemek yerine tek ekranda,
+        # art arda göstermek daha az tıklama gerektiriyor ve her şeyi bir
+        # bakışta gösteriyor.
+        if self.show_uretim_fire and self.show_satis:
+            return self._build_tabs()
+        return self._build_flat_form()
+
+    def _build_flat_form(self) -> ft.Control:
+        sections: list[ft.Control] = []
+        if self.show_uretim_fire:
+            sections.append(self._uretim_fire_section())
+        if self.show_satis:
+            sections.append(self._satis_section())
+        sections.append(ft.Divider())
+        sections.append(ft.Text("Stok & Fiyat", weight=ft.FontWeight.BOLD, color=self.accent_color))
+        sections.append(self._stok_fiyat_section())
+        return ft.Column(sections, spacing=12)
 
     def _build_tabs(self) -> ft.Tabs:
         # Not: yeni Flet sürümünde ft.Tab sadece başlığı temsil ediyor —
@@ -162,58 +234,16 @@ class DashboardBase:
         if self.show_uretim_fire:
             tab_headers.append(ft.Tab(label="Üretim / Fire"))
             tab_bodies.append(
-                ft.Container(
-                    ft.Column(
-                        [
-                            ft.Row(
-                                [
-                                    ft.Column([ft.Text("Üretim Miktarı", weight=ft.FontWeight.BOLD), self._triple_row(self.uretim_teneke, self.uretim_kg, self.uretim_adet)]),
-                                    ft.Column([ft.Text("Fire / Wastage", weight=ft.FontWeight.BOLD), self._triple_row(self.fire_teneke, self.fire_kg, self.fire_adet)]),
-                                ],
-                                wrap=True,
-                                spacing=24,
-                            ),
-                        ],
-                        scroll=ft.ScrollMode.AUTO,
-                    ),
-                    padding=12,
-                )
+                ft.Container(ft.Column([self._uretim_fire_section()], scroll=ft.ScrollMode.AUTO), padding=12)
             )
         if self.show_satis:
             tab_headers.append(ft.Tab(label="Satış"))
             tab_bodies.append(
-                ft.Container(
-                    ft.Column(
-                        [
-                            ft.Text("Satış Miktarı", weight=ft.FontWeight.BOLD),
-                            self._triple_row(self.satis_teneke, self.satis_kg, self.satis_adet),
-                            self.satis_id,
-                        ],
-                        scroll=ft.ScrollMode.AUTO,
-                    ),
-                    padding=12,
-                )
+                ft.Container(ft.Column([self._satis_section()], scroll=ft.ScrollMode.AUTO), padding=12)
             )
         tab_headers.append(ft.Tab(label="Stok & Fiyat"))
         tab_bodies.append(
-            ft.Container(
-                ft.Column(
-                    [
-                        ft.Row(
-                            [
-                                ft.Column([ft.Text("Başlangıç Stoğu", weight=ft.FontWeight.BOLD), self._triple_row(self.baslangic_teneke, self.baslangic_kg, self.baslangic_adet)]),
-                                ft.Column([ft.Text("Bitiş Stoğu (otomatik)", weight=ft.FontWeight.BOLD), self.bitis_text]),
-                            ],
-                            wrap=True,
-                            spacing=24,
-                        ),
-                        ft.Text("Fiyat (₺)", weight=ft.FontWeight.BOLD),
-                        self._triple_row(self.fiyat_teneke, self.fiyat_kg, self.fiyat_adet),
-                    ],
-                    scroll=ft.ScrollMode.AUTO,
-                ),
-                padding=12,
-            )
+            ft.Container(ft.Column([self._stok_fiyat_section()], scroll=ft.ScrollMode.AUTO), padding=12)
         )
 
         # Not: TabBarView'a sınırsız (unbounded) yükseklikte bir Column
