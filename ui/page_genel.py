@@ -11,6 +11,7 @@ import flet as ft
 
 from core.app_state import AppState
 from core.stock_logic import format_date_tr, format_number
+from ui.util import is_mounted
 
 
 class GenelPage:
@@ -32,9 +33,12 @@ class GenelPage:
         self.result_count_text = ft.Text("", size=12)
         self.table = ft.DataTable(columns=self._columns(), rows=[])
 
+        # Not: FilePicker artık bir "Service" (SharedPreferences ile aynı
+        # kategori) — eski `page.overlay.append(...)` deseni "Unknown
+        # control: FilePicker" hatası veriyordu, `page.services` gerekiyor.
         self.file_picker = ft.FilePicker()
         if self.page:
-            self.page.overlay.append(self.file_picker)
+            self.page.services.append(self.file_picker)
 
         self.control = ft.Column(
             [
@@ -101,8 +105,9 @@ class GenelPage:
 
         self.firma_dropdown.value = current_firma
         self.urun_dropdown.value = current_urun
-        if self.page:
+        if is_mounted(self.firma_dropdown):
             self.firma_dropdown.update()
+        if is_mounted(self.urun_dropdown):
             self.urun_dropdown.update()
 
     def _filtered_rows(self) -> list[dict]:
@@ -154,8 +159,9 @@ class GenelPage:
                 )
             )
         self.table.rows = data_rows
-        if self.page:
+        if is_mounted(self.table):
             self.table.update()
+        if is_mounted(self.result_count_text):
             self.result_count_text.update()
 
     def _clear_filters(self, e) -> None:

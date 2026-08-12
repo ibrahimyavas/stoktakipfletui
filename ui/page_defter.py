@@ -22,6 +22,7 @@ from core.stock_logic import (
     has_locked_starting_stock,
     recalculate_product_stock_chain,
 )
+from ui.util import is_mounted
 
 
 def _new_id() -> str:
@@ -140,13 +141,18 @@ class DefterPage:
             tab_headers.append(ft.Tab(label="Üretim / Fire"))
             tab_bodies.append(
                 ft.Container(
-                    ft.Row(
+                    ft.Column(
                         [
-                            ft.Column([ft.Text("Üretim Miktarı", weight=ft.FontWeight.BOLD), self._triple_row(self.uretim_teneke, self.uretim_kg, self.uretim_adet)]),
-                            ft.Column([ft.Text("Fire / Wastage", weight=ft.FontWeight.BOLD), self._triple_row(self.fire_teneke, self.fire_kg, self.fire_adet)]),
+                            ft.Row(
+                                [
+                                    ft.Column([ft.Text("Üretim Miktarı", weight=ft.FontWeight.BOLD), self._triple_row(self.uretim_teneke, self.uretim_kg, self.uretim_adet)]),
+                                    ft.Column([ft.Text("Fire / Wastage", weight=ft.FontWeight.BOLD), self._triple_row(self.fire_teneke, self.fire_kg, self.fire_adet)]),
+                                ],
+                                wrap=True,
+                                spacing=24,
+                            ),
                         ],
-                        wrap=True,
-                        spacing=24,
+                        scroll=ft.ScrollMode.AUTO,
                     ),
                     padding=12,
                 )
@@ -160,7 +166,8 @@ class DefterPage:
                             ft.Text("Satış Miktarı", weight=ft.FontWeight.BOLD),
                             self._triple_row(self.satis_teneke, self.satis_kg, self.satis_adet),
                             self.satis_id,
-                        ]
+                        ],
+                        scroll=ft.ScrollMode.AUTO,
                     ),
                     padding=12,
                 )
@@ -180,18 +187,23 @@ class DefterPage:
                         ),
                         ft.Text("Fiyat (₺)", weight=ft.FontWeight.BOLD),
                         self._triple_row(self.fiyat_teneke, self.fiyat_kg, self.fiyat_adet),
-                    ]
+                    ],
+                    scroll=ft.ScrollMode.AUTO,
                 ),
                 padding=12,
             )
         )
 
+        # Not: TabBarView'a sınırsız (unbounded) yükseklikte bir Column
+        # içinde yer verilince Flutter "height is unbounded" hatası
+        # veriyordu — sabit bir height + içerik taşarsa iç scroll (yukarı)
+        # ile çözüldü.
         return ft.Tabs(
             length=len(tab_headers),
             content=ft.Column(
                 [
                     ft.TabBar(tabs=tab_headers),
-                    ft.TabBarView(controls=tab_bodies),
+                    ft.TabBarView(controls=tab_bodies, height=240),
                 ],
             ),
         )
@@ -220,7 +232,7 @@ class DefterPage:
             ft.DropdownOption(key=code, text=f"{r['urunAdi']} ({code}) — Bitiş: {format_number(r['bitisStokTeneke'])} T")
             for code, r in sorted(latest_by_code.items(), key=lambda kv: kv[1]["urunAdi"])
         ]
-        if self.page:
+        if is_mounted(self.product_dropdown):
             self.product_dropdown.update()
 
     def _refresh_table(self) -> None:
@@ -262,7 +274,7 @@ class DefterPage:
 
         self.table.columns = self._table_columns()
         self.table.rows = data_rows
-        if self.page:
+        if is_mounted(self.table):
             self.table.update()
 
     # -- Form davranışı ----------------------------------------------------
@@ -336,7 +348,7 @@ class DefterPage:
         self.bitis_text.value = (
             f"{format_number(ending['bitisStokTeneke'])} T / {format_number(ending['bitisStokKg'])} Kg / {format_number(ending['bitisStokAdet'])} Ad"
         )
-        if self.page:
+        if is_mounted(self.bitis_text):
             self.bitis_text.update()
 
     def _reset_form(self) -> None:

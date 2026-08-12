@@ -56,7 +56,7 @@ flet run --web main.py
   başlangıç stoğu kilidi, YENİ filtreleme özelliğinin 5 senaryosu) gerçek
   Turso veritabanına karşı `page=None` ile (Flet çalışma zamanı olmadan,
   doğrudan Python fonksiyon çağrılarıyla) test edildi, hepsi geçti.
-- ✅ **5 gerçek Flet API/davranış hatası** bulunup düzeltildi:
+- ✅ **7 gerçek Flet API/davranış hatası** bulunup düzeltildi:
   - `Dropdown(on_change=...)` → `on_select`
   - `Tab(text=...)` → `label`
   - `Tab(content=...)` artık yok, içerik `TabBarView` ile ayrı veriliyor
@@ -75,11 +75,25 @@ flet run --web main.py
     seçmesi; bu motorda yazı tipi glyph'leri çizilmiyor. `main.py`'da
     `web_renderer=ft.WebRenderer.CANVAS_KIT` ile daha olgun CanvasKit
     motoru zorlanarak düzeltildi.
-- ✅ **Görsel doğrulama yapıldı** — düzeltmeden sonra headless tarayıcıda
-  uygulama gerçekten render oldu (ekran görüntüsüyle doğrulandı: koyu tema,
-  "Hoş Geldiniz" ilk-açılış ayarlar ekranı düzgün görünüyor). Yine de
-  kendi bilgisayarında gerçek bir tarayıcıda son bir kez denemen faydalı
-  olur.
+  - **"Control must be added to the page first" hatası** — `DefterPage`/
+    `GenelPage.__init__` içinde ilk veri yüklemesi sırasında (dropdown/
+    tablo doldurulurken) `.update()` çağrılıyordu, ama o an kontrol henüz
+    sayfa ağacına eklenmemişti. `if self.page:` koruması yeterli değildi
+    (o hep sayfa nesnesinin kendisini kontrol ediyordu, kontrolün mount
+    durumunu değil). `ui/util.py`'deki `is_mounted()` yardımcı fonksiyonu
+    ile düzeltildi.
+  - **"Unknown control: FilePicker"** — `FilePicker` artık `SharedPreferences`
+    ile aynı kategoride bir "Service"; eski `page.overlay.append(...)`
+    yerine `page.services.append(...)` gerekiyormuş.
+  - **"TabBarView: height is unbounded"** — `DefterPage`'in kendi iç
+    sekmelerindeki (`Üretim/Fire`, `Satış`, `Stok & Fiyat`) `TabBarView`'a
+    sınırsız yükseklikte bir üst öğe içinde yer verilmişti. Sabit
+    `height=240` + taşarsa iç scroll ile düzeltildi.
+- ✅ **Görsel doğrulama yapıldı** — sadece ilk ekran değil, **uçtan uca tam
+  akış**: Ayarlar → Rol Seçimi → Kayıt Defteri (iç sekmeler dahil) →
+  Genel Tablo (gerçek Turso verisiyle, filtreler dahil) — hepsi Playwright
+  ekran görüntüleriyle, gerçek Turso veritabanına karşı doğrulandı, hiçbir
+  hata banner'ı çıkmadı.
 
 ## Sıradaki adım
 
