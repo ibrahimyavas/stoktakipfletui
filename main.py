@@ -208,4 +208,11 @@ if __name__ == "__main__":
     # erişim yavaş/engelliyse). Bu dosyalar zaten yerel olarak da
     # paketleniyor; no_cdn=True ile tarayıcı bunları doğrudan bizim
     # sunucumuzdan alır, internet bağlantısına bağımlılık kalmaz.
-    ft.run(main, no_cdn=True)
+    #
+    # web_renderer=CANVAS_KIT: "auto" seçildiğinde (varsayılan), tarayıcı
+    # WebGL + WasmGC destekliyorsa Flet daha yeni/deneysel "skwasm"
+    # motorunu seçiyor — bu motorda metinler (yazı tipi glyph'leri) hiç
+    # çizilmiyor, kutular/ikonlar görünüyor ama tüm yazılar görünmez
+    # kalıyordu. CanvasKit'i açıkça zorlamak bunu çözüyor (ekran
+    # görüntüsüyle doğrulandı).
+    ft.run(main, no_cdn=True, web_renderer=ft.WebRenderer.CANVAS_KIT)

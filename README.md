@@ -56,7 +56,7 @@ flet run --web main.py
   başlangıç stoğu kilidi, YENİ filtreleme özelliğinin 5 senaryosu) gerçek
   Turso veritabanına karşı `page=None` ile (Flet çalışma zamanı olmadan,
   doğrudan Python fonksiyon çağrılarıyla) test edildi, hepsi geçti.
-- ✅ **4 gerçek Flet API/davranış hatası** bulunup düzeltildi:
+- ✅ **5 gerçek Flet API/davranış hatası** bulunup düzeltildi:
   - `Dropdown(on_change=...)` → `on_select`
   - `Tab(text=...)` → `label`
   - `Tab(content=...)` artık yok, içerik `TabBarView` ile ayrı veriliyor
@@ -68,6 +68,13 @@ flet run --web main.py
     bağlantısına ihtiyaç yok. (İlk başta bunu "sandbox'a özgü bir kısıt"
     sandım, ama kullanıcı gerçek tarayıcısında da aynı takılmayı
     yaşayınca gerçek bir kod hatası olduğu ortaya çıktı.)
+  - **Yükleme bitince ekran açılıyor ama hiçbir yazı görünmüyordu**
+    (kutular/ikonlar/buton şekli görünüyor, başlıklar/etiketler/buton
+    yazısı tamamen boş) — sebebi `web_renderer="auto"` seçiminin, tarayıcı
+    WebGL + WasmGC destekliyorsa Flet'in yeni/deneysel `skwasm` motorunu
+    seçmesi; bu motorda yazı tipi glyph'leri çizilmiyor. `main.py`'da
+    `web_renderer=ft.WebRenderer.CANVAS_KIT` ile daha olgun CanvasKit
+    motoru zorlanarak düzeltildi.
 - ✅ **Görsel doğrulama yapıldı** — düzeltmeden sonra headless tarayıcıda
   uygulama gerçekten render oldu (ekran görüntüsüyle doğrulandı: koyu tema,
   "Hoş Geldiniz" ilk-açılış ayarlar ekranı düzgün görünüyor). Yine de
