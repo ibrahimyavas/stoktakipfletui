@@ -202,6 +202,16 @@ async def _save_first_run_settings(
 
 
 if __name__ == "__main__":
+    # view=WEB_BROWSER, port=8551: Varsayılan native pencere görünümü
+    # (FLET_APP) bu makinede (Wayland, XWayland yok) hiç görünmüyordu —
+    # süreç canlı ama ekranda pencere çıkmıyordu. Ayrıca varsayılan
+    # port=0 + native görünüm birleşimi Flet'in kendi içinde her zaman
+    # 8000'e sabitleniyor (flet/app.py'deki bilinen bir kısayol) — bu da
+    # önceki bir çalışmadan kalma süreç hâlâ o portu tutuyorsa
+    # "address already in use" hatasına yol açıyordu. Açık bir port
+    # vermek bu sabitlemeyi devre dışı bırakıyor. Tarayıcıda
+    # http://localhost:8551 adresini aç.
+    #
     # no_cdn=True: Flet varsayılan olarak CanvasKit/skwasm/font dosyalarını
     # harici bir CDN'den (gstatic.com) çekmeye çalışıyor — bu yüzden
     # tarayıcı yükleme ekranında sonsuza kadar takılı kalıyordu (CDN'e
@@ -215,4 +225,11 @@ if __name__ == "__main__":
     # çizilmiyor, kutular/ikonlar görünüyor ama tüm yazılar görünmez
     # kalıyordu. CanvasKit'i açıkça zorlamak bunu çözüyor (ekran
     # görüntüsüyle doğrulandı).
-    ft.run(main, no_cdn=True, web_renderer=ft.WebRenderer.CANVAS_KIT)
+    print("\nTarayıcıda şu adresi aç: http://localhost:8551\n")
+    ft.run(
+        main,
+        view=ft.AppView.WEB_BROWSER,
+        port=8551,
+        no_cdn=True,
+        web_renderer=ft.WebRenderer.CANVAS_KIT,
+    )
