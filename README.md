@@ -53,6 +53,14 @@ ile gerçek bir Android uygulaması olarak paketlenebiliyor.
   bytes'ı OCR'ın beklediği dosya yoluna çevirmek için geçici bir dosyaya
   yazıyoruz), liste/arama/görüntüle/sil.
 
+- **Düşük stok eşiği artık kullanıcı tarafından ayarlanabilir** (Rapor
+  ekranı) — Teneke/Kg/Adet için ayrı ayrı eşik girilebiliyor, "Eşiği
+  Kaydet" ile Turso'daki paylaşılan `meta` tablosuna yazılıyor
+  (`core/app_state.py::save_low_stock_thresholds`) — yani bir cihazdan
+  değiştirilen eşik TÜM cihazlarda/rollerde geçerli olur, sadece o
+  tarayıcı sekmesinde değil. Önceden web/PySide6 sürümlerinde de sabit
+  kodluydu (Teneke≤5, Kg≤50, Adet≤10); aynı varsayılanlar korunuyor.
+
 **Henüz yok**: Sheets senkron, Ayarlar'ı sonradan düzenleme ekranı — ikisi
 de PySide6 sürümünde de ikincil/opsiyonel özellikler, kanıt kapsamının
 dışında tutuldu.
@@ -198,6 +206,53 @@ veritabanına, aynı non-destructive upsert senkron modeliyle bağlanıyor
 web görünümü de, ileride `flet build apk` ile üretilecek gerçek Android
 uygulaması da, PySide6 masaüstü uygulaması da aynı veriyi paylaşır —
 biri diğerini geçersiz kılmaz, çakışma olmaz.
+
+## Silme davranışları + ortak veritabanı entegrasyonu (UI dışı, doğrudan fonksiyon seviyesinde test)
+
+Kullanıcı isteği üzerine: "işlemlerin veri silindiğinde mantıklı tepkiler
+verip vermediği" ve "json-react (web) ve py (Flet/PySide6) ortak bir
+veritabanına erişip girdi yapabildiği" UI'dan bağımsız, doğrudan fonksiyon
+çağrılarıyla, gerçek Turso DB'sine karşı test edildi:
+
+- ✅ **Zincirin ortasındaki kaydı silme**: kalan kayıtlar doğru yeniden
+  zincirleniyor (silinen kayda değil, bir öncekine bağlanıyor) —
+  `recalculate_product_stock_chain` "hayalet" referans bırakmıyor.
+- ✅ **Bir ürünün tüm kayıtlarını silme**: hiçbir yerde (stok listeleri
+  dahil) çökme ya da hayalet veri kalmıyor.
+- ✅ **Kilitli başlangıç stoğunun kilitli (en erken) kaydını silme** —
+  dürüst bulgu: kilit bilgisi o TEK satıra bağlı olduğu için satırla
+  birlikte kayboluyor (web/PySide6 sürümüyle birebir aynı, önceden var
+  olan bir tasarım sınırı — burada "düzeltilmedi", sadece davranış
+  doğrulandı ve belgelendi).
+- ✅ **Firma silme**: satışı olan firma engelleniyor, olmayan başarıyla
+  siliniyor.
+- ✅ **Satış silme**: ilişkili Defter kaydı otomatik olarak "Bekleyen
+  Satışlar"a geri dönüyor (`satisId` korunarak, tekrar "Firmaya İşle"
+  ile işlenebilir durumda).
+- ✅ **Toplu (çoklu id) silme** tek çağrıda sorunsuz çalışıyor.
+- ✅ **Ortak veritabanı — gerçek uçtan uca doğrulama**: Python'ın
+  (`core/db_core.py`) yazdığı bir kayıt, web app'in kullandığı canlı
+  Cloudflare Worker API'sinden (`stoktakip4.ibrahim-yavas998.workers.dev/api/data`,
+  gerçek `GET`) okunarak doğrulandı; tersine, Worker'ın `POST
+  /api/data` ile (web app'in gerçek yazma yolu) yazdığı bir kayıt da
+  Python'ın `state.records`'unda göründü. Worker'ın `DELETE` yolu
+  (`deletedRecordIds` vb.) de aynı şekilde doğrulandı. Yani Flet,
+  PySide6 ve web app **gerçekten aynı anda, aynı veritabanına, çakışma
+  olmadan** yazıp okuyabiliyor — bu iddia değil, canlı ortama karşı
+  ölçüldü.
+- ✅ **10. gerçek hata bulunup düzeltildi (bu turda)**: Düşük stok
+  kontrolü, sadece TEK birimde (ör. yalnızca Adet) takip edilen bir
+  ürünü, diğer iki birim (Teneke/Kg) hep 0 olduğu için **kalıcı olarak
+  yanlış alarmla işaretliyordu** (ör. gerçek veride "Tereyağ(1kg): 0 T /
+  0 Kg / 500 Ad" sağlıklı olmasına rağmen sürekli uyarı veriyordu — bu
+  web/PySide6 sürümünde de var olan, adet için `>0` koruması olup
+  teneke/kg için olmayan asimetrik bir mantık hatasıydı). Artık her
+  ürün için hangi birim(ler)in geçmişte gerçekten kullanıldığı tespit
+  edilip eşik kontrolü sadece o birimlere uygulanıyor; tamamen tükenmiş
+  ürünler yine doğru yakalanıyor, hiç kullanılmayan birimler artık
+  yanlış alarm üretmiyor. Ayrıca küçük bir ikinci kusur da giderildi:
+  uyarı banner'ı gizlenince eski metni temizlemiyordu (görsel olarak
+  zararsız ama testi/kodu okuyanı yanıltabilirdi).
 
 ## Durum
 

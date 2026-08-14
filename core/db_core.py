@@ -113,6 +113,12 @@ class AllData:
     sheetsUrl: str = ""
     profile: str | None = None
     updatedAt: str | None = None
+    # JSON string, örn. '{"teneke": 5, "kg": 50, "adet": 10}' — boşsa
+    # çağıran taraf kendi varsayılanını kullanır. `meta` tablosundaki genel
+    # key/value deposuna ek bir satır olarak yazılıyor; web app/PySide6
+    # sürümü bu anahtarı hiç bilmiyor/okumuyor, dolayısıyla onlarla
+    # paylaşılan şemayı bozmuyor (geriye dönük uyumlu, katkısal bir alan).
+    lowStockThresholds: str = ""
 
 
 class DbCore:
@@ -210,6 +216,7 @@ class DbCore:
             sheetsUrl=self._get_meta("sheetsUrl") or "",
             profile=self._get_meta("profile"),
             updatedAt=self._get_meta("updatedAt"),
+            lowStockThresholds=self._get_meta("lowStockThresholds") or "",
         )
 
     def save_all_data(
@@ -220,6 +227,7 @@ class DbCore:
         waybills: list[dict] | None = None,
         sheets_url: str | None = None,
         profile: str | None = None,
+        low_stock_thresholds: str | None = None,
         deleted_record_ids: list[str] | None = None,
         deleted_company_ids: list[str] | None = None,
         deleted_sale_ids: list[str] | None = None,
@@ -249,6 +257,8 @@ class DbCore:
             self._set_meta("sheetsUrl", sheets_url)
         if profile is not None:
             self._set_meta("profile", profile or "")
+        if low_stock_thresholds is not None:
+            self._set_meta("lowStockThresholds", low_stock_thresholds)
 
         updated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         self._set_meta("updatedAt", updated_at)

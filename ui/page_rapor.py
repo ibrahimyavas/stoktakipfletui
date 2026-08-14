@@ -10,6 +10,8 @@ sorunsuz çalışır."""
 
 from __future__ import annotations
 
+import asyncio
+import json
 from collections import defaultdict
 
 import flet as ft
@@ -25,6 +27,22 @@ UNIT_FIELD = {
 }
 
 CHART_HEIGHT = 180
+
+# Web/PySide6 sürümlerinde bu eşikler sabit kodluydu (<=5 T, <=50 Kg,
+# <=10 Ad). Burada kullanıcı tarafından değiştirilebilir hale getirildi;
+# aynı varsayılanları koruyoruz.
+DEFAULT_THRESHOLDS = {"teneke": 5.0, "kg": 50.0, "adet": 10.0}
+
+
+def _num_field(label: str, value: float, width: int = 110) -> ft.TextField:
+    return ft.TextField(label=label, value=str(value), width=width, keyboard_type=ft.KeyboardType.NUMBER)
+
+
+def _num(tf: ft.TextField) -> float:
+    try:
+        return float((tf.value or "0").replace(",", "."))
+    except ValueError:
+        return 0.0
 
 
 class RaporPage:
@@ -57,6 +75,33 @@ class RaporPage:
             visible=False,
         )
 
+        # Düşük stok eşiği ayarları — Turso'daki paylaşılan `meta` tablosuna
+        # yazılıyor (core/app_state.py::save_low_stock_thresholds), yani bu
+        # ekrandan kaydedilen değer TÜM cihazlarda/rollerde geçerli olur,
+        # sadece bu tarayıcı sekmesinde değil.
+        thresholds = self._load_thresholds()
+        self.threshold_teneke = _num_field("Teneke ≤", thresholds["teneke"])
+        self.threshold_kg = _num_field("Kg ≤", thresholds["kg"])
+        self.threshold_adet = _num_field("Adet ≤", thresholds["adet"])
+        for tf in (self.threshold_teneke, self.threshold_kg, self.threshold_adet):
+            tf.on_change = lambda e: self._recompute_low_stock()
+        self.threshold_status = ft.Text("", size=12)
+        self.threshold_save_btn = ft.OutlinedButton(
+            "Eşiği Kaydet", icon=ft.Icons.SAVE, on_click=lambda e: self.page.run_task(self._save_thresholds)
+        )
+        self.threshold_row = ft.Row(
+            [
+                ft.Text("Düşük stok eşiği:", size=12),
+                self.threshold_teneke,
+                self.threshold_kg,
+                self.threshold_adet,
+                self.threshold_save_btn,
+                self.threshold_status,
+            ],
+            wrap=True,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+
         self.kpi_uretim = self._kpi_card("Toplam Üretim", "#34D399")
         self.kpi_satis = self._kpi_card("Toplam Satış", "#60A5FA")
         self.kpi_fire = self._kpi_card("Fire / Wastage", "#F87171")
@@ -74,6 +119,7 @@ class RaporPage:
         self.control = ft.Column(
             [
                 ft.Row([self.unit_dropdown, self.product_dropdown], wrap=True),
+                self.threshold_row,
                 self.low_stock_banner,
                 ft.ResponsiveRow(
                     [
@@ -168,26 +214,102 @@ class RaporPage:
         self._recompute_low_stock()
         self._recompute_chart(records, uretim_field, satis_field)
 
+    # -- Düşük stok eşiği ayarları ------------------------------------------
+
+    def _load_thresholds(self) -> dict:
+        raw = self.state.low_stock_thresholds
+        if not raw:
+            return dict(DEFAULT_THRESHOLDS)
+        try:
+            data = json.loads(raw)
+            return {
+                "teneke": float(data.get("teneke", DEFAULT_THRESHOLDS["teneke"])),
+                "kg": float(data.get("kg", DEFAULT_THRESHOLDS["kg"])),
+                "adet": float(data.get("adet", DEFAULT_THRESHOLDS["adet"])),
+            }
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return dict(DEFAULT_THRESHOLDS)
+
+    async def _save_thresholds(self) -> None:
+        thresholds = {
+            "teneke": _num(self.threshold_teneke),
+            "kg": _num(self.threshold_kg),
+            "adet": _num(self.threshold_adet),
+        }
+        try:
+            await asyncio.to_thread(self.state.save_low_stock_thresholds, json.dumps(thresholds))
+        except Exception as exc:  # noqa: BLE001
+            self.threshold_status.value = f"Kaydedilemedi: {exc}"
+            self.threshold_status.color = ft.Colors.RED
+            if is_mounted(self.threshold_status):
+                self.threshold_status.update()
+            return
+        self.threshold_status.value = "Kaydedildi (tüm cihazlarda geçerli)."
+        self.threshold_status.color = ft.Colors.GREEN
+        if is_mounted(self.threshold_status):
+            self.threshold_status.update()
+        self._recompute_low_stock()
+
     def _recompute_low_stock(self) -> None:
+        threshold_teneke = _num(self.threshold_teneke)
+        threshold_kg = _num(self.threshold_kg)
+        threshold_adet = _num(self.threshold_adet)
+
+        # Not: web/PySide6 sürümünde bu kontrol her zaman "teneke<=eşik VEYA
+        # kg<=eşik VEYA (adet>0 VE adet<=eşik)" şeklindeydi — adet için özel
+        # bir ">0" koruması vardı ama teneke/kg için YOKTU. Bu, sadece TEK bir
+        # birimde takip edilen ürünlerde (ör. sadece Kg ile üretilen bir ürün)
+        # diğer iki birimin hep 0 olması yüzünden ÜRÜN HİÇ AZALMASA BİLE kalıcı
+        # bir "düşük stok" yanlış alarmına yol açıyordu (ör. "Tereyağ(1kg): 0 T
+        # / 0 Kg / 500 Ad" — sağlıklı 500 Adet'e rağmen sürekli uyarı
+        # veriyordu). Burada her ürün için hangi birim(ler)in GERÇEKTEN
+        # kullanıldığı (o ürünün geçmişinde en az bir kayıtta o birimde
+        # üretim/stok görülmüş mü) belirlenip, eşik kontrolü SADECE
+        # kullanılan birimlere uygulanıyor — tamamen tükenmiş bir ürün
+        # (geçmişte kullanılmış birimde 0'a düşmüş) yine doğru şekilde
+        # yakalanıyor, hiç kullanılmamış birimler artık yanlış alarm
+        # üretmiyor.
         latest: dict[str, dict] = {}
+        used_units: dict[str, set[str]] = {}
         for r in self.state.records:
             code = r["urunKodu"]
             existing = latest.get(code)
             if not existing or r["tarih"] > existing["tarih"]:
                 latest[code] = r
+            units = used_units.setdefault(code, set())
+            if r.get("uretimTeneke") or r.get("baslangicStokTeneke") or r.get("bitisStokTeneke"):
+                units.add("teneke")
+            if r.get("uretimKg") or r.get("baslangicStokKg") or r.get("bitisStokKg"):
+                units.add("kg")
+            if r.get("uretimAdet") or r.get("baslangicStokAdet") or r.get("bitisStokAdet"):
+                units.add("adet")
 
         low = []
-        for r in latest.values():
+        for code, r in latest.items():
             teneke = r.get("bitisStokTeneke") or 0
             kg = r.get("bitisStokKg") or 0
             adet = r.get("bitisStokAdet") or 0
-            if teneke <= 5 or kg <= 50 or (adet > 0 and adet <= 10):
+            units = used_units.get(code) or set()
+            is_low = (
+                ("teneke" in units and teneke <= threshold_teneke)
+                or ("kg" in units and kg <= threshold_kg)
+                or ("adet" in units and adet <= threshold_adet)
+                or not units  # hiçbir birimde geçmiş görülmedi — güvenlik amaçlı uyar
+            )
+            if is_low:
                 low.append(f"{r['urunAdi']}: {format_number(teneke)} T / {format_number(kg)} Kg / {format_number(adet)} Ad")
 
         if low:
             self.low_stock_banner.content.value = "⚠ Düşük Stok Uyarısı: " + " | ".join(low)
             self.low_stock_banner.visible = True
         else:
+            # Not: sadece visible=False yapmak yetmiyordu — banner tekrar
+            # görünür hale geldiğinde (ör. eşik değiştirilip geri alınınca)
+            # bir önceki çağrıdan kalma BAYAT metni bir an için gösterirdi.
+            # `visible=False`'ken kullanıcı göremese de, `.content.value`'yu
+            # okuyan/test eden hiçbir kod yanlışlıkla "hâlâ düşük" sanmasın
+            # diye burada da temizliyoruz.
+            self.low_stock_banner.content.value = ""
             self.low_stock_banner.visible = False
         if is_mounted(self.low_stock_banner):
             self.low_stock_banner.update()

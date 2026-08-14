@@ -25,6 +25,7 @@ class AppState:
         self.sheets_url: str = ""
         self.profile: str | None = None
         self.updated_at: str | None = None
+        self.low_stock_thresholds: str = ""
 
     def load_all(self) -> None:
         data = self.db.get_all_data()
@@ -35,6 +36,7 @@ class AppState:
         self.sheets_url = data.sheetsUrl
         self.profile = data.profile
         self.updated_at = data.updatedAt
+        self.low_stock_thresholds = data.lowStockThresholds
 
     # -- Kaydetme yardımcıları — her biri doğrudan tek bir koleksiyonu
     # günceller (web tarafındaki tam-dizi-diff modeli yerine, masaüstünde her
@@ -63,3 +65,7 @@ class AppState:
     def save_profile(self, role: str) -> None:
         self.db.save_all_data(profile=role)
         self.profile = role
+
+    def save_low_stock_thresholds(self, thresholds_json: str) -> None:
+        self.db.save_all_data(low_stock_thresholds=thresholds_json)
+        self.low_stock_thresholds = thresholds_json
