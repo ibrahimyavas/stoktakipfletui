@@ -86,9 +86,11 @@ class BarcodeMapperDialog:
                 height=560,
             ),
             actions=[
-                ft.OutlinedButton("Temizle", on_click=lambda e: self._clear_form()),
+                ft.OutlinedButton("Temizle", icon=ft.Icons.CLEAR, on_click=lambda e: self._clear_form()),
                 ft.TextButton("Kapat", on_click=self._close),
-                ft.FilledButton("Eşleştirmeyi Kaydet", on_click=lambda e: self.page.run_task(self._on_save_click)),
+                ft.FilledButton(
+                    "Eşleştirmeyi Kaydet", icon=ft.Icons.SAVE, on_click=lambda e: self.page.run_task(self._on_save_click)
+                ),
             ],
         )
         self._refresh_list()

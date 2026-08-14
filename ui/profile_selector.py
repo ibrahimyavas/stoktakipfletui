@@ -8,6 +8,12 @@ import flet as ft
 
 from core.models import PAGE_LABELS, PROFILES
 
+_ROLE_ICONS = {
+    "uretim": ft.Icons.FACTORY,
+    "satis": ft.Icons.STOREFRONT,
+    "admin": ft.Icons.ADMIN_PANEL_SETTINGS,
+}
+
 
 def _role_card(role_key: str, on_click: Callable[[str], None]) -> ft.Card:
     info = PROFILES[role_key]
@@ -30,14 +36,21 @@ def _role_card(role_key: str, on_click: Callable[[str], None]) -> ft.Card:
         content=ft.Container(
             content=ft.Column(
                 [
-                    ft.Text(info.label, size=20, weight=ft.FontWeight.BOLD, color=info.color),
+                    ft.Row(
+                        [
+                            ft.Icon(_ROLE_ICONS.get(role_key), color=info.color, size=26),
+                            ft.Text(info.label, size=20, weight=ft.FontWeight.BOLD, color=info.color),
+                        ],
+                        spacing=8,
+                    ),
                     ft.Text(info.description, size=13),
                     chips,
                     ft.Container(height=8),
                     ft.FilledButton(
                         f"{info.label} olarak devam et",
+                        icon=ft.Icons.ARROW_FORWARD,
                         on_click=lambda e: on_click(role_key),
-                        style=ft.ButtonStyle(bgcolor=info.color, color="#04120C"),
+                        style=ft.ButtonStyle(bgcolor=info.color, color="#04120C", shape=ft.RoundedRectangleBorder(radius=10)),
                         width=300,
                     ),
                 ],

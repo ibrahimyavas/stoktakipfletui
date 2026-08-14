@@ -27,8 +27,8 @@ class GenelPage:
         self.tarih_baslangic = ft.TextField(label="Başlangıç Tarihi (YYYY-AA-GG)", width=200, on_change=lambda e: self._refresh())
         self.tarih_bitis = ft.TextField(label="Bitiş Tarihi (YYYY-AA-GG)", width=200, on_change=lambda e: self._refresh())
 
-        clear_btn = ft.OutlinedButton("Filtreleri Temizle", on_click=self._clear_filters)
-        export_btn = ft.FilledButton("CSV Olarak Dışa Aktar", on_click=self._export_csv)
+        clear_btn = ft.OutlinedButton("Filtreleri Temizle", icon=ft.Icons.FILTER_ALT_OFF, on_click=self._clear_filters)
+        export_btn = ft.FilledButton("CSV Olarak Dışa Aktar", icon=ft.Icons.DOWNLOAD, on_click=self._export_csv)
 
         self.result_count_text = ft.Text("", size=12)
         self.table = ft.DataTable(columns=self._columns(), rows=[])

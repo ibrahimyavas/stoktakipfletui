@@ -114,8 +114,8 @@ class DashboardBase:
         )
         self.table = ft.DataTable(columns=self._table_columns(), rows=[])
 
-        self.save_btn = ft.FilledButton("Kaydet", on_click=self._on_save_click)
-        self.cancel_btn = ft.OutlinedButton("İptal / Yeni Kayıt", on_click=lambda e: self._reset_form())
+        self.save_btn = ft.FilledButton("Kaydet", icon=ft.Icons.SAVE, on_click=self._on_save_click)
+        self.cancel_btn = ft.OutlinedButton("İptal / Yeni Kayıt", icon=ft.Icons.REFRESH, on_click=lambda e: self._reset_form())
 
         self.form_body = self._build_form_body()
 
@@ -232,16 +232,16 @@ class DashboardBase:
         tab_bodies: list[ft.Control] = []
 
         if self.show_uretim_fire:
-            tab_headers.append(ft.Tab(label="Üretim / Fire"))
+            tab_headers.append(ft.Tab(label="Üretim / Fire", icon=ft.Icons.PRECISION_MANUFACTURING))
             tab_bodies.append(
                 ft.Container(ft.Column([self._uretim_fire_section()], scroll=ft.ScrollMode.AUTO), padding=12)
             )
         if self.show_satis:
-            tab_headers.append(ft.Tab(label="Satış"))
+            tab_headers.append(ft.Tab(label="Satış", icon=ft.Icons.SELL))
             tab_bodies.append(
                 ft.Container(ft.Column([self._satis_section()], scroll=ft.ScrollMode.AUTO), padding=12)
             )
-        tab_headers.append(ft.Tab(label="Stok & Fiyat"))
+        tab_headers.append(ft.Tab(label="Stok & Fiyat", icon=ft.Icons.INVENTORY_2))
         tab_bodies.append(
             ft.Container(ft.Column([self._stok_fiyat_section()], scroll=ft.ScrollMode.AUTO), padding=12)
         )

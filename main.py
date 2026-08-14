@@ -29,6 +29,16 @@ from ui.page_satislar import SatislarPage
 from ui.profile_selector import build_profile_selector
 from ui.theme import apply_theme
 
+# Üst sekme çubuğundaki her sayfa için ikon — sadece görsel, PAGE_LABELS'ın
+# (core/models.py, PySide6 sürümüyle paylaşılan) yanına Flet'e özgü bir
+# eşleme olarak burada tutuluyor.
+PAGE_ICONS = {
+    "defter": ft.Icons.EDIT_NOTE,
+    "rapor": ft.Icons.INSIGHTS,
+    "satis": ft.Icons.STOREFRONT,
+    "genel": ft.Icons.TABLE_CHART,
+}
+
 
 async def _load_settings_with_retry(prefs: ft.SharedPreferences, attempts: int = 2) -> AppSettings:
     last_exc: Exception | None = None
@@ -66,7 +76,7 @@ async def main(page: ft.Page) -> None:
                 [
                     ft.Text("Ayarlar okunamadı.", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.RED),
                     ft.Text(f"Muhtemelen yavaş/kararsız bir bağlantı ({exc})."),
-                    ft.FilledButton("Tekrar Dene", on_click=lambda e: page.run_task(main, page)),
+                    ft.FilledButton("Tekrar Dene", icon=ft.Icons.REFRESH, on_click=lambda e: page.run_task(main, page)),
                 ]
             )
         )
@@ -94,7 +104,7 @@ async def main(page: ft.Page) -> None:
                 [
                     ft.Text("Veritabanına bağlanılamadı.", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.RED),
                     ft.Text(str(exc)),
-                    ft.FilledButton("Ayarları Düzenle", on_click=lambda e: _show_first_run_settings(page, prefs, settings)),
+                    ft.FilledButton("Ayarları Düzenle", icon=ft.Icons.SETTINGS, on_click=lambda e: _show_first_run_settings(page, prefs, settings)),
                 ]
             )
         )
@@ -189,7 +199,12 @@ def _show_main_shell(page: ft.Page, state: AppState, role_key: str, prefs: ft.Sh
         expand=True,
         content=ft.Column(
             [
-                ft.TabBar(tabs=[ft.Tab(label=PAGE_LABELS.get(p, p)) for p in info.pages]),
+                ft.TabBar(
+                    tabs=[
+                        ft.Tab(label=PAGE_LABELS.get(p, p), icon=PAGE_ICONS.get(p))
+                        for p in info.pages
+                    ]
+                ),
                 ft.TabBarView(controls=page_bodies, expand=True),
             ],
             expand=True,
@@ -198,6 +213,7 @@ def _show_main_shell(page: ft.Page, state: AppState, role_key: str, prefs: ft.Sh
 
     header = ft.Row(
         [
+            ft.Icon(ft.Icons.INVENTORY, color=info.color, size=22),
             ft.Text("Üretim & Satış Defteri", weight=ft.FontWeight.BOLD, size=16),
             ft.Container(
                 content=ft.Text(info.label, color=info.color, weight=ft.FontWeight.BOLD),
@@ -207,10 +223,16 @@ def _show_main_shell(page: ft.Page, state: AppState, role_key: str, prefs: ft.Sh
             ),
             saving_text,
             ft.Container(expand=True),
-            ft.OutlinedButton("Ürün / Barkod Eşleştirme", on_click=open_barcode_mapper),
-            ft.OutlinedButton("İrsaliye Arşivi", on_click=open_waybill_vault),
-            ft.OutlinedButton("Rol Değiştir", on_click=change_profile),
+            # Not: bu Row'a asla wrap=True verme — expand=True olan `tabs`
+            # Column'ının altındaki TÜM içeriği sessizce (hiçbir hata izi
+            # bırakmadan) gri bir kutuya çeviren gerçek bir Flet/Flutter
+            # bug'ı bulundu ve doğrulandı. Buton metinlerini kısa tutup
+            # dar ekranlarda yatay kaydırmaya izin vermek daha güvenli.
+            ft.OutlinedButton("Barkod Eşleştirme", icon=ft.Icons.QR_CODE_2, on_click=open_barcode_mapper),
+            ft.OutlinedButton("İrsaliye Arşivi", icon=ft.Icons.DESCRIPTION, on_click=open_waybill_vault),
+            ft.OutlinedButton("Rol Değiştir", icon=ft.Icons.SWAP_HORIZ, on_click=change_profile),
         ],
+        scroll=ft.ScrollMode.AUTO,
     )
 
     page.add(ft.Column([header, tabs], expand=True))
@@ -243,7 +265,7 @@ def _show_first_run_settings(page: ft.Page, prefs: ft.SharedPreferences, setting
                 token_field,
                 gemini_field,
                 error_text,
-                ft.FilledButton("Kaydet ve Devam Et", on_click=on_save),
+                ft.FilledButton("Kaydet ve Devam Et", icon=ft.Icons.ARROW_FORWARD, on_click=on_save),
             ],
             spacing=14,
         )

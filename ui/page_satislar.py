@@ -64,7 +64,9 @@ class SatislarPage:
         # -- Stok & Yeni Satış -------------------------------------------
         self.quick_product_dropdown = ft.Dropdown(label="Ürün", options=[], width=340)
         self.quick_teneke, self.quick_kg, self.quick_adet = _num_field("Teneke"), _num_field("Kg"), _num_field("Adet")
-        self.quick_start_btn = ft.FilledButton("Satışı Başlat → Firmaya İşle", on_click=self._on_quick_start_click)
+        self.quick_start_btn = ft.FilledButton(
+            "Satışı Başlat → Firmaya İşle", icon=ft.Icons.SHOPPING_CART_CHECKOUT, on_click=self._on_quick_start_click
+        )
         self.stock_table = ft.DataTable(
             columns=[ft.DataColumn(ft.Text(c)) for c in ("Ürün", "Teneke", "Kg", "Adet")], rows=[]
         )
@@ -79,8 +81,8 @@ class SatislarPage:
         self.company_kod = ft.TextField(label="Kod", width=140)
         self.company_ad = ft.TextField(label="Ad", width=240)
         self.company_tel = ft.TextField(label="Telefon", width=160)
-        self.company_save_btn = ft.FilledButton("Kaydet", on_click=self._on_company_save_click)
-        self.company_clear_btn = ft.OutlinedButton("Temizle", on_click=lambda e: self._clear_company_form())
+        self.company_save_btn = ft.FilledButton("Kaydet", icon=ft.Icons.SAVE, on_click=self._on_company_save_click)
+        self.company_clear_btn = ft.OutlinedButton("Temizle", icon=ft.Icons.CLEAR, on_click=lambda e: self._clear_company_form())
         self.company_table = ft.DataTable(
             columns=[ft.DataColumn(ft.Text(c)) for c in ("Kod", "Ad", "Telefon", "İşlem")], rows=[]
         )
@@ -179,10 +181,10 @@ class SatislarPage:
                 [
                     ft.TabBar(
                         tabs=[
-                            ft.Tab(label="Stok & Yeni Satış"),
-                            ft.Tab(label="Bekleyen Satışlar"),
-                            ft.Tab(label="Firmalar"),
-                            ft.Tab(label="Satış Listesi"),
+                            ft.Tab(label="Stok & Yeni Satış", icon=ft.Icons.ADD_SHOPPING_CART),
+                            ft.Tab(label="Bekleyen Satışlar", icon=ft.Icons.PENDING_ACTIONS),
+                            ft.Tab(label="Firmalar", icon=ft.Icons.BUSINESS),
+                            ft.Tab(label="Satış Listesi", icon=ft.Icons.RECEIPT_LONG),
                         ]
                     ),
                     # Not: dashboard_common.py'deki aynı "TabBarView: height is
@@ -323,7 +325,10 @@ class SatislarPage:
                         ft.DataCell(ft.Text(f"{format_number(r.get('satisTeneke'))} T / {format_number(r.get('satisKg'))} Kg")),
                         ft.DataCell(ft.Text(r.get("satisId") or "-")),
                         ft.DataCell(
-                            ft.FilledButton("Firmaya İşle", on_click=lambda e, rec=r: self._open_complete_sale_dialog(rec))
+                            ft.FilledButton(
+                                "Firmaya İşle", icon=ft.Icons.CHECK_CIRCLE,
+                                on_click=lambda e, rec=r: self._open_complete_sale_dialog(rec),
+                            )
                         ),
                     ]
                 )
@@ -473,7 +478,9 @@ class SatislarPage:
                 if is_mounted(photo_status):
                     photo_status.update()
 
-        photo_btn = ft.OutlinedButton("İrsaliye Fotoğrafı Ekle...", on_click=lambda e: self.page.run_task(attach_photo, e))
+        photo_btn = ft.OutlinedButton(
+            "İrsaliye Fotoğrafı Ekle...", icon=ft.Icons.ADD_A_PHOTO, on_click=lambda e: self.page.run_task(attach_photo, e)
+        )
 
         async def on_save(e) -> None:
             photo_data = photo_bytes_holder["data"]
@@ -532,7 +539,7 @@ class SatislarPage:
             ),
             actions=[
                 ft.TextButton("Vazgeç", on_click=close_dialog),
-                ft.FilledButton("Satışı Tamamla", on_click=lambda e: self.page.run_task(on_save, e)),
+                ft.FilledButton("Satışı Tamamla", icon=ft.Icons.CHECK_CIRCLE, on_click=lambda e: self.page.run_task(on_save, e)),
             ],
         )
         refresh_total()

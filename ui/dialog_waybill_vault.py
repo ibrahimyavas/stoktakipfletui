@@ -54,7 +54,7 @@ class WaybillVaultDialog:
             alignment=ft.Alignment(0, 0),
         )
         self.pick_photo_btn = ft.OutlinedButton(
-            "Fotoğraf Seç...", on_click=lambda e: self.page.run_task(self._pick_photo)
+            "Fotoğraf Seç...", icon=ft.Icons.ADD_A_PHOTO, on_click=lambda e: self.page.run_task(self._pick_photo)
         )
         self.ocr_status = ft.Text("", size=12, color=ft.Colors.GREY)
         self.irsaliye_no_field = ft.TextField(label="İrsaliye No", width=460)
@@ -80,7 +80,7 @@ class WaybillVaultDialog:
                     self.notlar_field,
                     self.raw_text_view,
                     self.add_status_text,
-                    ft.FilledButton("İrsaliyeyi Kaydet", on_click=lambda e: self.page.run_task(self._save)),
+                    ft.FilledButton("İrsaliyeyi Kaydet", icon=ft.Icons.SAVE, on_click=lambda e: self.page.run_task(self._save)),
                 ],
                 spacing=10,
                 scroll=ft.ScrollMode.AUTO,
@@ -100,7 +100,12 @@ class WaybillVaultDialog:
             length=2,
             content=ft.Column(
                 [
-                    ft.TabBar(tabs=[ft.Tab(label="Kayıtlı İrsaliyeler"), ft.Tab(label="Yeni İrsaliye Fotoğrafı")]),
+                    ft.TabBar(
+                        tabs=[
+                            ft.Tab(label="Kayıtlı İrsaliyeler", icon=ft.Icons.FOLDER),
+                            ft.Tab(label="Yeni İrsaliye Fotoğrafı", icon=ft.Icons.ADD_A_PHOTO),
+                        ]
+                    ),
                     ft.TabBarView(controls=[list_tab, add_tab], height=460),
                 ],
             ),

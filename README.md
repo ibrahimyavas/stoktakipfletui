@@ -173,9 +173,42 @@ flet run --web main.py
   veriyle, hiçbir hata banner'ı olmadan render olduğu doğrulandı (Rapor'un
   çubuk grafiği dahil).
 
+## Görsel cila (tema, ikonlar)
+
+`ui/theme.py` artık sadece `color_scheme_seed` seçmiyor — tüm bileşenler
+için tutarlı bir görsel dil tanımlıyor: yuvarlak köşeli kartlar (elevation
+1, radius 14), yuvarlak köşeli butonlar (radius 10, tutarlı padding),
+yuvarlak köşeli diyaloglar (radius 16), kalın/net tablo başlıkları
+(`DataTableTheme.heading_text_style`), kalın sekme etiketleri
+(`TabBarTheme`). Ayrıca her sekmeye/butona anlamlı bir Material ikon
+eklendi (Kayıt Defteri, Rapor, Satışlar, Genel Tablo sekmeleri; Üretim/
+Fire, Satış, Stok&Fiyat iç sekmeleri; Kaydet/İptal/Firmaya İşle/Satışı
+Tamamla vb. tüm birincil butonlar; rol seçim kartları) — daha profesyonel
+ve taranabilir bir arayüz.
+
+**App ve tarayıcı arayüzlerinin aynı görünmesi** ayrıca bir senkronizasyon
+işi gerektirmiyor — Flet'te native (masaüstü) görünüm de, web görünümü de
+**aynı Flutter/CanvasKit render motorunu** kullanıyor; ikisi de aynı
+Python kontrol ağacından aynı piksel çıktısını üretiyor. Bu yapısal bir
+garanti, ayrıca "senkronize" edilmesi gereken iki ayrı kod tabanı yok.
+
+**Cihazlar arası entegrasyon** zaten en baştan beri var: hepsi aynı Turso
+veritabanına, aynı non-destructive upsert senkron modeliyle bağlanıyor
+(`core/db_core.py` — PySide6 sürümüyle birebir aynı). Şu an test edilen
+web görünümü de, ileride `flet build apk` ile üretilecek gerçek Android
+uygulaması da, PySide6 masaüstü uygulaması da aynı veriyi paylaşır —
+biri diğerini geçersiz kılmaz, çakışma olmaz.
+
 ## Durum
 
-Artık kanıt-of-concept kapsamındaki **tüm ana ekranlar tamam**: Rol Seçimi,
-Üretim/Satış/Admin dashboard'ları, Genel Tablo, Satışlar & Firmalar, Rapor,
-Ürün/Barkod Eşleştirme, İrsaliye Arşivi (+OCR). `python3 main.py` ile son
-bir kez dene — sorun yoksa bu depoya (`stoktakipfletui`) push'larız.
+Artık kanıt-of-concept kapsamındaki **tüm ana ekranlar tamam ve görsel
+olarak cilalanmış**: Rol Seçimi, Üretim/Satış/Admin dashboard'ları, Genel
+Tablo, Satışlar & Firmalar, Rapor, Ürün/Barkod Eşleştirme, İrsaliye Arşivi
+(+OCR). `python3 main.py` ile son bir kez dene — sorun yoksa bu depoya
+(`stoktakipfletui`) push'larız.
+
+**Henüz yapılmadı**: gerçek bir Android APK üretimi (`flet build apk`) —
+bu, Android SDK/Java/Gradle kurulu gerçek bir makine (ya da GitHub Actions
+gibi bir CI) gerektiriyor, bu sandbox'ta yapılamıyor. İstersen bunun için
+ayrı bir GitHub Actions workflow'u kurabiliriz (stoktakipapp'in PySide6
+paketleme workflow'una benzer şekilde).
