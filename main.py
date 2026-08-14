@@ -17,14 +17,12 @@ import flet as ft
 from core.app_state import AppState
 from core.auth import generate_remember_token
 from core.db_core import DbCore
-from core.models import PAGE_LABELS, PROFILES
+from core.models import PAGE_LABELS, PROFILES, compute_effective_access, roles_from_field
 from core.settings import AppSettings, load_settings, save_settings
 from ui.dashboard_common import DashboardBase
 from ui.dialog_barcode_mapper import BarcodeMapperDialog
 from ui.dialog_user_management import UserManagementDialog
 from ui.dialog_waybill_vault import WaybillVaultDialog
-from ui.page_dashboard_satis import SatisDashboard
-from ui.page_dashboard_uretim import UretimDashboard
 from ui.page_genel import GenelPage
 from ui.page_login import build_login_screen
 from ui.page_rapor import RaporPage
@@ -157,7 +155,9 @@ async def main(page: ft.Page) -> None:
             if candidate and candidate.get("rememberToken") and candidate["rememberToken"] == settings.remembered_token:
                 remembered_user = candidate
         if remembered_user:
-            _show_main_shell(page, state, remembered_user["role"], prefs, settings, current_user=remembered_user)
+            _show_main_shell(
+                page, state, roles_from_field(remembered_user.get("role")), prefs, settings, current_user=remembered_user
+            )
         else:
             _show_login(page, state, prefs, settings)
     elif state.profile and state.profile in PROFILES:
@@ -166,7 +166,7 @@ async def main(page: ft.Page) -> None:
         # geriye dönük uyumluluk için korunuyor. Admin, Kullanıcı
         # Yönetimi'nden ilk hesabı tanımlayınca bir sonraki açılıştan
         # itibaren giriş ekranına geçilir.
-        _show_main_shell(page, state, state.profile, prefs, settings)
+        _show_main_shell(page, state, [state.profile], prefs, settings)
     else:
         _show_profile_selector(page, state, prefs, settings)
 
@@ -194,7 +194,7 @@ async def _complete_login(
         settings.remembered_username = ""
         settings.remembered_token = ""
     await save_settings(prefs, settings)
-    _show_main_shell(page, state, user["role"], prefs, settings, current_user=user)
+    _show_main_shell(page, state, roles_from_field(user.get("role")), prefs, settings, current_user=user)
 
 
 async def _logout(page: ft.Page, state: AppState, prefs: ft.SharedPreferences, settings: AppSettings) -> None:
@@ -207,13 +207,13 @@ async def _logout(page: ft.Page, state: AppState, prefs: ft.SharedPreferences, s
 async def _sync_now(
     page: ft.Page,
     state: AppState,
-    role_key: str,
+    role_keys: list[str],
     prefs: ft.SharedPreferences,
     settings: AppSettings,
     current_user: dict | None,
 ) -> None:
     await asyncio.to_thread(state.load_all)
-    _show_main_shell(page, state, role_key, prefs, settings, current_user=current_user)
+    _show_main_shell(page, state, role_keys, prefs, settings, current_user=current_user)
 
 
 def _show_profile_selector(page: ft.Page, state: AppState, prefs: ft.SharedPreferences, settings: AppSettings) -> None:
@@ -229,18 +229,18 @@ def _show_profile_selector(page: ft.Page, state: AppState, prefs: ft.SharedPrefe
 async def _select_profile(page: ft.Page, state: AppState, role_key: str, prefs: ft.SharedPreferences, settings: AppSettings) -> None:
     await asyncio.to_thread(state.db.save_all_data, profile=role_key)
     state.profile = role_key
-    _show_main_shell(page, state, role_key, prefs, settings)
+    _show_main_shell(page, state, [role_key], prefs, settings)
 
 
 def _show_main_shell(
     page: ft.Page,
     state: AppState,
-    role_key: str,
+    role_keys: list[str],
     prefs: ft.SharedPreferences,
     settings: AppSettings,
     current_user: dict | None = None,
 ) -> None:
-    info = PROFILES[role_key]
+    info = compute_effective_access(role_keys)
     page.controls.clear()
 
     saving_text = ft.Text("", color=ft.Colors.GREEN, size=12)
@@ -257,7 +257,7 @@ def _show_main_shell(
         page.run_task(_logout, page, state, prefs, settings)
 
     def do_sync_now(e) -> None:
-        page.run_task(_sync_now, page, state, role_key, prefs, settings, current_user)
+        page.run_task(_sync_now, page, state, role_keys, prefs, settings, current_user)
 
     def open_barcode_mapper(e) -> None:
         # Ürün/fiyat/başlangıç stoğu değişiklikleri Kayıt Defteri, Genel
@@ -266,7 +266,7 @@ def _show_main_shell(
         # (page_bodies dahil) taze state ile yeniden kuruyoruz.
         BarcodeMapperDialog(
             page, state,
-            on_saved=lambda: _show_main_shell(page, state, role_key, prefs, settings, current_user=current_user),
+            on_saved=lambda: _show_main_shell(page, state, role_keys, prefs, settings, current_user=current_user),
         ).open()
 
     def open_waybill_vault(e) -> None:
@@ -278,7 +278,7 @@ def _show_main_shell(
         UserManagementDialog(
             page, state,
             current_user_id=(current_user or {}).get("id"),
-            on_saved=lambda: _show_main_shell(page, state, role_key, prefs, settings, current_user=current_user),
+            on_saved=lambda: _show_main_shell(page, state, role_keys, prefs, settings, current_user=current_user),
         ).open()
 
     # Not: yeni Flet sürümünde ft.Tab sadece başlığı temsil ediyor — içerik
@@ -286,19 +286,18 @@ def _show_main_shell(
     page_bodies: list[ft.Control] = []
     for page_key in info.pages:
         if page_key == "defter":
-            # Üretim ve Satış artık tamamen ayrı dashboard sınıfları
-            # (page_dashboard_uretim.py / page_dashboard_satis.py) — birbirinin
-            # alanlarını hiç görmüyor. Admin ikisine de aynı anda erişmesi
-            # gerektiği için ortak taban sınıfı DashboardBase'i doğrudan, her
-            # iki bayrak da açık şekilde kullanıyor.
-            if role_key == "uretim":
-                body = UretimDashboard(page, state, on_saving=set_saving).control
-            elif role_key == "satis":
-                body = SatisDashboard(page, state, on_saving=set_saving).control
-            else:
-                body = DashboardBase(
-                    page, state, role_key, on_saving=set_saving, show_uretim_fire=True, show_satis=True
-                ).control
+            # Üretim ve Satış'ın kendi özel dashboard sınıfları (page_dashboard_
+            # uretim.py / page_dashboard_satis.py) sadece show_uretim_fire/
+            # show_satis bayraklarını sabit veren birer DashboardBase kısayolu.
+            # Bir kullanıcı artık birden fazla role sahip olabildiği (ör. hem
+            # Üretim hem Satış) için tek-tip DashboardBase'i doğrudan,
+            # `info`'nun BİRLEŞTİRİLMİŞ bayraklarıyla kullanıyoruz — tek rollü
+            # kullanıcılar için davranış birebir eskisiyle aynı, çoklu rollü
+            # kullanıcılar (admin dahil) ilgili tüm alanları aynı ekranda görür.
+            body = DashboardBase(
+                page, state, role_keys[0], on_saving=set_saving,
+                show_uretim_fire=info.show_uretim_fire, show_satis=info.show_satis,
+            ).control
         elif page_key == "genel":
             body = GenelPage(page, state).control
         elif page_key == "satis":
@@ -369,7 +368,7 @@ def _show_main_shell(
         ft.OutlinedButton("Barkod Eşleştirme", icon=ft.Icons.QR_CODE_2, on_click=open_barcode_mapper),
         ft.OutlinedButton("İrsaliye Arşivi", icon=ft.Icons.DESCRIPTION, on_click=open_waybill_vault),
     ]
-    if role_key == "admin":
+    if info.is_admin:
         header_controls.append(
             ft.OutlinedButton("Kullanıcı Yönetimi", icon=ft.Icons.MANAGE_ACCOUNTS, on_click=open_user_management)
         )

@@ -13,7 +13,7 @@ import flet as ft
 
 from core.app_state import AppState
 from core.auth import hash_password
-from core.models import PROFILES
+from core.models import PROFILES, compute_effective_access, roles_from_field, roles_to_field
 from ui.util import is_mounted
 
 
@@ -34,12 +34,15 @@ class UserManagementDialog:
             label="Şifre", width=220, password=True, can_reveal_password=True,
             hint_text="Düzenlerken boş bırakılırsa şifre değişmez",
         )
-        self.role_dropdown = ft.Dropdown(
-            label="Rol",
-            width=180,
-            value="uretim",
-            options=[ft.DropdownOption(key=key, text=info.label) for key, info in PROFILES.items()],
-        )
+        # Tek seçimlik Dropdown yerine çoklu seçim: bir kullanıcı artık aynı
+        # anda birden fazla role sahip olabiliyor (ör. hem Üretim hem Satış)
+        # — erişimleri PROFILES'ların BİRLEŞİMİ olur (bkz.
+        # core/models.py::compute_effective_access). En az bir rol seçilmesi
+        # zorunlu; tek rol seçilirse davranış eskisiyle birebir aynı.
+        self.role_checkboxes: dict[str, ft.Checkbox] = {
+            key: ft.Checkbox(label=info.label, value=(key == "uretim"))
+            for key, info in PROFILES.items()
+        }
         self.status_text = ft.Text("", size=12)
         self.save_btn = ft.FilledButton("Kaydet", icon=ft.Icons.SAVE, on_click=lambda e: self.page.run_task(self._save))
         self.clear_btn = ft.OutlinedButton("Temizle", icon=ft.Icons.CLEAR, on_click=lambda e: self._clear_form())
@@ -52,7 +55,11 @@ class UserManagementDialog:
                 ft.Column(
                     [
                         ft.Text("Kullanıcı Ekle / Düzenle", weight=ft.FontWeight.BOLD),
-                        ft.Row([self.name_field, self.password_field, self.role_dropdown], wrap=True),
+                        ft.Row([self.name_field, self.password_field], wrap=True),
+                        ft.Row(
+                            [ft.Text("Roller:", size=12), *self.role_checkboxes.values()],
+                            wrap=True, spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
                         ft.Row([self.save_btn, self.clear_btn]),
                         self.status_text,
                         ft.Divider(),
@@ -84,13 +91,11 @@ class UserManagementDialog:
     def _refresh_list(self) -> None:
         rows = []
         for u in sorted(self.state.users, key=lambda u: (u.get("name") or "").lower()):
-            role_info = PROFILES.get(u.get("role"))
-            role_label = role_info.label if role_info else (u.get("role") or "?")
-            role_color = role_info.color if role_info else None
+            access = compute_effective_access(roles_from_field(u.get("role")))
             rows.append(
                 ft.ListTile(
                     title=ft.Text(u.get("name") or ""),
-                    subtitle=ft.Text(role_label, color=role_color),
+                    subtitle=ft.Text(access.label, color=access.color),
                     trailing=ft.Row(
                         [
                             ft.IconButton(ft.Icons.EDIT, tooltip="Düzenle", on_click=lambda e, user=u: self._load_user(user)),
@@ -113,7 +118,9 @@ class UserManagementDialog:
         self.editing_id = u["id"]
         self.name_field.value = u.get("name") or ""
         self.password_field.value = ""
-        self.role_dropdown.value = u.get("role") or "uretim"
+        selected = set(roles_from_field(u.get("role")))
+        for key, cb in self.role_checkboxes.items():
+            cb.value = key in selected
         self.status_text.value = ""
         if self.page:
             self.page.update()
@@ -122,7 +129,8 @@ class UserManagementDialog:
         self.editing_id = None
         self.name_field.value = ""
         self.password_field.value = ""
-        self.role_dropdown.value = "uretim"
+        for key, cb in self.role_checkboxes.items():
+            cb.value = key == "uretim"
         self.status_text.value = ""
         if self.page:
             self.page.update()
@@ -132,14 +140,15 @@ class UserManagementDialog:
     async def _save(self) -> bool:
         name = (self.name_field.value or "").strip()
         password = self.password_field.value or ""
-        role = self.role_dropdown.value or "uretim"
+        selected_roles = [key for key, cb in self.role_checkboxes.items() if cb.value]
 
         if not name:
             self._set_status("Kullanıcı adı zorunludur.", error=True)
             return False
-        if role not in PROFILES:
-            self._set_status("Geçersiz rol.", error=True)
+        if not selected_roles:
+            self._set_status("En az bir rol seçilmelidir.", error=True)
             return False
+        role = roles_to_field(selected_roles)
 
         existing = next((u for u in self.state.users if u["id"] == self.editing_id), None) if self.editing_id else None
         duplicate = next(
@@ -189,8 +198,8 @@ class UserManagementDialog:
         if u["id"] == self.current_user_id:
             self._set_status("Şu an giriş yapmış olduğunuz hesabı silemezsiniz.", error=True)
             return
-        admins = [x for x in self.state.users if x.get("role") == "admin"]
-        if u.get("role") == "admin" and len(admins) <= 1:
+        admins = [x for x in self.state.users if "admin" in roles_from_field(x.get("role"))]
+        if "admin" in roles_from_field(u.get("role")) and len(admins) <= 1:
             self._set_status("Son admin hesabı silinemez — önce başka bir admin tanımlayın.", error=True)
             return
         self._confirm(

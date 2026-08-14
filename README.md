@@ -330,6 +330,45 @@ açılışta giriş ekranı + "Beni Hatırla".
   "Çıkış Yap" ile ortalanmış Giriş ekranına geri dönülmesi — hepsi
   gerçek Turso DB'sine karşı, sıfır `PAGEERROR` ile doğrulandı.
 
+## Hız iyileştirmesi ve çoklu rol desteği (bu tur)
+
+Kullanıcı isteği: uygulamanın daha hızlı çalışması ("özellik bozulmadığı
+sürece her şeyi değiştirebilirsin" yetkisiyle) ve bir kullanıcıya birden
+fazla rol tanımlanabilmesi.
+
+- **DB katmanı tek round-trip'e indirildi** (`core/db_core.py`) — hiçbir
+  davranış/özellik değişmedi, sadece **kaç kere ağa çıkıldığı** değişti.
+  Önceden `get_all_data()` 9 ayrı `.execute()` (5 tablo + 4 meta anahtarı),
+  `save_all_data()` ise tabloya göre 10'a kadar ayrı çağrı yapıyordu; Turso
+  uzak bir sunucu olduğu için asıl gecikme sorgu **başına** sabit bir ağ
+  gidiş-dönüşü — satır sayısı değil. `libsql_client`'ın `.batch()`'i farklı
+  SQL'leri bile tek round-trip'te çalıştırıp sırayla eşleşen sonuç listesi
+  döndürdüğü için artık ikisi de her zaman **tam olarak 1** `.batch()`
+  çağrısına indirgeniyor. Gerçek Turso veritabanına karşı ölçüldü:
+  `get_all_data()` önceden çok saniye sürerken artık **~0.07s**,
+  `save_all_data()` **~0.11s**. Round-trip write/read/cleanup testiyle
+  hiçbir veri kaybı/regresyon olmadığı doğrulandı.
+- **Bir kullanıcıya birden fazla rol** (`core/models.py::compute_effective_access`)
+  — Kullanıcı Yönetimi'nde artık tek seçimlik Dropdown yerine Üretim/Satış/
+  Admin için ayrı ayrı işaretlenebilen kutucuklar var; en az biri seçili
+  olmalı. Kullanıcının fiili erişimi seçtiği rollerin **birleşimi**:
+  sayfalar (Kayıt Defteri/Rapor/Satış/Genel Tablo) birleşir, Kayıt
+  Defteri'nde Üretim+Satış alanları birlikte görünür. DB'de `role` sütunu
+  artık virgülle ayrılmış bir liste (`"uretim,satis"`); eski tek-rollü
+  satırlar (`"admin"`) hiçbir değişiklik gerekmeden aynı şekilde okunuyor
+  (`roles_from_field`/`roles_to_field`). Tek rol seçilen kullanıcılar için
+  davranış (renk, etiket, erişilebilir sayfalar) **eskisiyle birebir aynı**
+  — bu katkısal bir genişletme, geriye dönük kırılma yok. Çoklu rollü bir
+  kullanıcı için kimlik rozeti `"ad — Üretim + Satış"` şeklinde, ayırt
+  edici bir aksan renkte (`#F59E0B`) gösteriliyor; admin seçiliyse admin
+  rengi/etiketi kazanıyor.
+- ✅ Gerçek Turso DB'sine karşı hem saf mantık hem uçtan uca Playwright ile
+  doğrulandı: Üretim+Satış işaretlenmiş bir kullanıcı oluşturma (gerçek
+  tıklamalarla), listede doğru görünmesi, o kullanıcıyla giriş yapınca
+  Kayıt Defteri'nde hem Üretim/Fire hem Satış sekmelerinin, header'da hem
+  4 sayfanın da (Rapor dahil) görünmesi, "Satışlar & Firmalar" sekmesinin
+  tam çalışması — sıfır hata.
+
 ## Durum
 
 Artık kanıt-of-concept kapsamındaki **tüm ana ekranlar + hesap/giriş

@@ -177,66 +177,86 @@ class DbCore:
 
     # -- yazma -----------------------------------------------------------
 
-    def _upsert_rows(self, table: str, columns: list[str], rows: list[dict]) -> None:
-        """Her satırı id'ye göre UPSERT eder (INSERT ... ON CONFLICT DO UPDATE).
-        Böylece başka bir cihazın/uygulamanın eş zamanlı eklediği, bu isteğin
-        haberdar olmadığı satırlar ASLA silinmez — sadece bu istekte
-        gönderilen satırlar yazılır/güncellenir.
+    # Performans notu: `libsql_client`'ın `.batch()`'i, listedeki tüm
+    # ifadeleri (farklı SQL'ler olsalar bile) TEK bir ağ round-trip'inde
+    # çalıştırıp sırayla eşleşen bir `ResultSet` listesi döndürüyor. Turso
+    # uzak bir sunucu olduğu için asıl gecikme sorgu başına sabit bir ağ
+    # gidiş-dönüş maliyeti — satır/tablo sayısı değil. Önceden `get_all_data`
+    # 9, `save_all_data` (tabloya göre) 10'a kadar ayrı `.execute()` çağrısı
+    # yapıyordu; şimdi ikisi de her zaman TEK `.batch()` çağrısına
+    # indirgeniyor — hiçbir özellik/davranış değişmedi, sadece kaç kere
+    # ağa çıkıldığı değişti.
+
+    def _upsert_stmts(self, table: str, columns: list[str], rows: list[dict]) -> list[tuple[str, tuple]]:
+        """Her satır için bir UPSERT (INSERT ... ON CONFLICT DO UPDATE) ifadesi
+        üretir (henüz ÇALIŞTIRMAZ) — böylece başka bir cihazın/uygulamanın eş
+        zamanlı eklediği, bu isteğin haberdar olmadığı satırlar ASLA silinmez;
+        sadece bu istekte gönderilen satırlar yazılır/güncellenir.
         """
         if not rows:
-            return
+            return []
         placeholders = ", ".join("?" for _ in columns)
         update_assignments = ", ".join(f"{c} = excluded.{c}" for c in columns if c != "id")
         sql = (
             f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders}) "
             f"ON CONFLICT(id) DO UPDATE SET {update_assignments}"
         )
-        stmts = [(sql, tuple(_normalize_value(row.get(c)) for c in columns)) for row in rows]
-        self._client.batch(stmts)
+        return [(sql, tuple(_normalize_value(row.get(c)) for c in columns)) for row in rows]
 
-    def _delete_rows(self, table: str, ids: list[str]) -> None:
-        """Yalnızca çağıranın açıkça 'sildim' dediği id'leri siler — tabloyu
-        topyekûn boşaltıp yeniden doldurmaz."""
+    def _delete_stmt(self, table: str, ids: list[str]) -> tuple[str, tuple] | None:
+        """Yalnızca çağıranın açıkça 'sildim' dediği id'leri silen ifadeyi
+        üretir — tabloyu topyekûn boşaltıp yeniden doldurmaz."""
         if not ids:
-            return
-        placeholders = ", ".join("?" for _ in ids)
-        self._client.execute(f"DELETE FROM {table} WHERE id IN ({placeholders})", tuple(ids))
-
-    def _get_meta(self, key: str) -> str | None:
-        res = self._client.execute("SELECT value FROM meta WHERE key = ?", (key,))
-        if not res.rows:
             return None
-        return res.rows[0]["value"]
+        placeholders = ", ".join("?" for _ in ids)
+        return (f"DELETE FROM {table} WHERE id IN ({placeholders})", tuple(ids))
 
-    def _set_meta(self, key: str, value: str) -> None:
-        self._client.execute(
+    @staticmethod
+    def _set_meta_stmt(key: str, value: str) -> tuple[str, tuple]:
+        return (
             "INSERT INTO meta (key, value) VALUES (?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, value),
         )
 
-    def _read_table(self, table: str, columns: list[str]) -> list[dict]:
-        res = self._client.execute(f"SELECT {', '.join(columns)} FROM {table} ORDER BY rowid ASC")
-        return [row.asdict() for row in res.rows]
-
     # -- genel API ---------------------------------------------------------
 
     def get_all_data(self) -> AllData:
-        records = self._read_table("records", RECORD_COLUMNS)
+        # Sıra önemli: sonuçlar isteklerle aynı sırada dönüyor.
+        table_specs = [
+            ("records", RECORD_COLUMNS),
+            ("companies", COMPANY_COLUMNS),
+            ("sales", SALE_COLUMNS),
+            ("waybills", WAYBILL_COLUMNS),
+            ("users", USER_COLUMNS),
+        ]
+        meta_keys = ["sheetsUrl", "profile", "updatedAt", "lowStockThresholds"]
+        stmts: list = [
+            f"SELECT {', '.join(cols)} FROM {table} ORDER BY rowid ASC" for table, cols in table_specs
+        ] + [("SELECT value FROM meta WHERE key = ?", (key,)) for key in meta_keys]
+
+        results = self._client.batch(stmts)
+        table_results = {table: [row.asdict() for row in results[i].rows] for i, (table, _) in enumerate(table_specs)}
+        meta_results = {
+            key: (results[len(table_specs) + i].rows[0]["value"] if results[len(table_specs) + i].rows else None)
+            for i, key in enumerate(meta_keys)
+        }
+
+        records = table_results["records"]
         for r in records:
             r["manualBaslangicStok"] = bool(r.get("manualBaslangicStok"))
             r["baslangicStokKilitli"] = bool(r.get("baslangicStokKilitli"))
 
         return AllData(
             records=records,
-            companies=self._read_table("companies", COMPANY_COLUMNS),
-            sales=self._read_table("sales", SALE_COLUMNS),
-            waybills=self._read_table("waybills", WAYBILL_COLUMNS),
-            users=self._read_table("users", USER_COLUMNS),
-            sheetsUrl=self._get_meta("sheetsUrl") or "",
-            profile=self._get_meta("profile"),
-            updatedAt=self._get_meta("updatedAt"),
-            lowStockThresholds=self._get_meta("lowStockThresholds") or "",
+            companies=table_results["companies"],
+            sales=table_results["sales"],
+            waybills=table_results["waybills"],
+            users=table_results["users"],
+            sheetsUrl=meta_results["sheetsUrl"] or "",
+            profile=meta_results["profile"],
+            updatedAt=meta_results["updatedAt"],
+            lowStockThresholds=meta_results["lowStockThresholds"] or "",
         )
 
     def save_all_data(
@@ -255,38 +275,37 @@ class DbCore:
         deleted_waybill_ids: list[str] | None = None,
         deleted_user_ids: list[str] | None = None,
     ) -> str:
-        if records is not None:
-            self._upsert_rows("records", RECORD_COLUMNS, records)
-        if deleted_record_ids:
-            self._delete_rows("records", deleted_record_ids)
+        stmts: list[tuple[str, tuple]] = []
 
-        if companies is not None:
-            self._upsert_rows("companies", COMPANY_COLUMNS, companies)
-        if deleted_company_ids:
-            self._delete_rows("companies", deleted_company_ids)
+        stmts += self._upsert_stmts("records", RECORD_COLUMNS, records or [])
+        if d := self._delete_stmt("records", deleted_record_ids or []):
+            stmts.append(d)
 
-        if sales is not None:
-            self._upsert_rows("sales", SALE_COLUMNS, sales)
-        if deleted_sale_ids:
-            self._delete_rows("sales", deleted_sale_ids)
+        stmts += self._upsert_stmts("companies", COMPANY_COLUMNS, companies or [])
+        if d := self._delete_stmt("companies", deleted_company_ids or []):
+            stmts.append(d)
 
-        if waybills is not None:
-            self._upsert_rows("waybills", WAYBILL_COLUMNS, waybills)
-        if deleted_waybill_ids:
-            self._delete_rows("waybills", deleted_waybill_ids)
+        stmts += self._upsert_stmts("sales", SALE_COLUMNS, sales or [])
+        if d := self._delete_stmt("sales", deleted_sale_ids or []):
+            stmts.append(d)
 
-        if users is not None:
-            self._upsert_rows("users", USER_COLUMNS, users)
-        if deleted_user_ids:
-            self._delete_rows("users", deleted_user_ids)
+        stmts += self._upsert_stmts("waybills", WAYBILL_COLUMNS, waybills or [])
+        if d := self._delete_stmt("waybills", deleted_waybill_ids or []):
+            stmts.append(d)
+
+        stmts += self._upsert_stmts("users", USER_COLUMNS, users or [])
+        if d := self._delete_stmt("users", deleted_user_ids or []):
+            stmts.append(d)
 
         if sheets_url is not None:
-            self._set_meta("sheetsUrl", sheets_url)
+            stmts.append(self._set_meta_stmt("sheetsUrl", sheets_url))
         if profile is not None:
-            self._set_meta("profile", profile or "")
+            stmts.append(self._set_meta_stmt("profile", profile or ""))
         if low_stock_thresholds is not None:
-            self._set_meta("lowStockThresholds", low_stock_thresholds)
+            stmts.append(self._set_meta_stmt("lowStockThresholds", low_stock_thresholds))
 
         updated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        self._set_meta("updatedAt", updated_at)
+        stmts.append(self._set_meta_stmt("updatedAt", updated_at))
+
+        self._client.batch(stmts)
         return updated_at
