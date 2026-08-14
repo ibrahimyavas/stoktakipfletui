@@ -19,9 +19,12 @@ from core.db_core import DbCore
 from core.models import PAGE_LABELS, PROFILES
 from core.settings import AppSettings, load_settings, save_settings
 from ui.dashboard_common import DashboardBase
+from ui.dialog_barcode_mapper import BarcodeMapperDialog
+from ui.dialog_waybill_vault import WaybillVaultDialog
 from ui.page_dashboard_satis import SatisDashboard
 from ui.page_dashboard_uretim import UretimDashboard
 from ui.page_genel import GenelPage
+from ui.page_rapor import RaporPage
 from ui.page_satislar import SatislarPage
 from ui.profile_selector import build_profile_selector
 from ui.theme import apply_theme
@@ -136,6 +139,20 @@ def _show_main_shell(page: ft.Page, state: AppState, role_key: str, prefs: ft.Sh
     def change_profile(e) -> None:
         page.run_task(_change_profile, page, state, prefs, settings)
 
+    def open_barcode_mapper(e) -> None:
+        # Ürün/fiyat/başlangıç stoğu değişiklikleri Kayıt Defteri, Genel
+        # Tablo ve Satışlar sekmelerindeki ürün listelerini de etkiliyor —
+        # bu yüzden kaydedince en basit doğru çözüm olarak tüm kabuğu
+        # (page_bodies dahil) taze state ile yeniden kuruyoruz.
+        BarcodeMapperDialog(
+            page, state, on_saved=lambda: _show_main_shell(page, state, role_key, prefs, settings)
+        ).open()
+
+    def open_waybill_vault(e) -> None:
+        # İrsaliye ekleme/silme diğer sekmeleri etkilemiyor, dialog kendi
+        # listesini zaten kendi içinde tazeliyor.
+        WaybillVaultDialog(page, state, settings.gemini_api_key, on_saved=lambda: None).open()
+
     # Not: yeni Flet sürümünde ft.Tab sadece başlığı temsil ediyor — içerik
     # ft.TabBarView ile eşleştiriliyor (Tabs'ın kendi kabul ettiği yapı).
     page_bodies: list[ft.Control] = []
@@ -158,6 +175,8 @@ def _show_main_shell(page: ft.Page, state: AppState, role_key: str, prefs: ft.Sh
             body = GenelPage(page, state).control
         elif page_key == "satis":
             body = SatislarPage(page, state, on_saving=set_saving).control
+        elif page_key == "rapor":
+            body = RaporPage(page, state).control
         else:
             body = ft.Container(
                 ft.Text(f"{PAGE_LABELS.get(page_key, page_key)} — bu ekran henüz eklenmedi (bu kanıt-of-concept sürümde).", italic=True),
@@ -188,8 +207,10 @@ def _show_main_shell(page: ft.Page, state: AppState, role_key: str, prefs: ft.Sh
             ),
             saving_text,
             ft.Container(expand=True),
+            ft.OutlinedButton("Ürün / Barkod Eşleştirme", on_click=open_barcode_mapper),
+            ft.OutlinedButton("İrsaliye Arşivi", on_click=open_waybill_vault),
             ft.OutlinedButton("Rol Değiştir", on_click=change_profile),
-        ]
+        ],
     )
 
     page.add(ft.Column([header, tabs], expand=True))

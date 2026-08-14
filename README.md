@@ -36,9 +36,26 @@ ile gerçek bir Android uygulaması olarak paketlenebiliyor.
   metod) hem "Yeni Satış Başlat" hem "Bekleyen Satışlar" tarafından
   paylaşılıyor. QR kodu `qrcode` kütüphanesiyle tamamen yerel/offline
   üretiliyor (web sürümündeki gibi harici bir API'ye bağımlı değil).
+- **Haftalık / Aylık Rapor** (`ui/page_rapor.py`) — KPI kartları (Toplam
+  Üretim/Satış/Fire/Gelir), düşük stok uyarısı, son 6 ay için Üretim/Satış
+  çubuk grafiği. **Not**: bu Flet sürümünde (0.86.x) hazır bir grafik
+  kontrolü yok — `flet.charts` diye bir modül hiç mevcut değil (eski Flet
+  sürümlerinde vardı, kaldırılmış). Grafiği ekstra bir kütüphane eklemeden,
+  doğrudan renkli `Container`'ların oranlı yüksekliğiyle çiziyoruz.
+- **Ürün / Barkod Eşleştirme** (`ui/dialog_barcode_mapper.py`) — header'dan
+  açılan bir diyalog: ürün tanımlama, fiyat, başlangıç stoğu girme/kilitleme
+  (kilitlenince Kayıt Defteri'nde o ürünün başlangıç stoğu alanı salt-okunur
+  olur), kayıtlı ürün/barkod listesi + arama.
+- **İrsaliye Arşivi** (`ui/dialog_waybill_vault.py`) — header'dan açılan bir
+  diyalog: dosya seçiciyle fotoğraf ekleme (kamera yok — bilinçli kapsam
+  dışı), Gemini OCR ile otomatik alan doldurma (`core/ocr.py` — PySide6
+  sürümüyle birebir aynı, değiştirilmedi; sadece `FilePicker`'dan gelen
+  bytes'ı OCR'ın beklediği dosya yoluna çevirmek için geçici bir dosyaya
+  yazıyoruz), liste/arama/görüntüle/sil.
 
-**Henüz yok** (kanıt onaylanınca eklenecek): Rapor, Barkod Eşleştirme,
-İrsaliye Arşivi (+OCR), Sheets senkron, Ayarlar'ı sonradan düzenleme ekranı.
+**Henüz yok**: Sheets senkron, Ayarlar'ı sonradan düzenleme ekranı — ikisi
+de PySide6 sürümünde de ikincil/opsiyonel özellikler, kanıt kapsamının
+dışında tutuldu.
 
 ## Neden `core/` PySide6 sürümüyle aynı?
 
@@ -136,9 +153,29 @@ flet run --web main.py
   kullanıcı kalıcı olarak tepkisiz bir ekranda kalıyordu — hiçbir geri
   bildirim yoktu. `main.py`'da 2 deneme + kurtarılabilir bir "Tekrar Dene"
   ekranıyla düzeltildi.
+- ✅ **9. gerçek hata bulunup düzeltildi — en sinsi olanı**: header'a yeni
+  butonlar eklenince `ft.Row(..., wrap=True)` kullanıldı; bu, yanındaki
+  `expand=True` olan sekme alanının **tüm içeriğini sessizce düz gri bir
+  kutuya** dönüştürdü — ne sunucu tarafında bir Python hatası, ne tarayıcı
+  konsolunda bir JS hatası, hiçbir iz yoktu (Flutter'ın release modundaki
+  varsayılan `ErrorWidget`'ı düz gri bir kutu olarak render ediyor, hata
+  metni göstermiyor). Bu **her rolü** etkiliyordu (admin'e özel sanılmıştı,
+  ama satış rolünde de aynı şekilde tekrarlandığı doğrulanınca header'daki
+  değişiklikten kaynaklandığı anlaşıldı). `wrap=True` kaldırılınca
+  düzeldi — genel kural: bir `expand=True` kardeşi olan `Row`'a asla
+  `wrap=True` verme, ekranı daraltmak yerine buton metinlerini kısa tut.
+- ✅ **Rapor, Barkod Eşleştirme, İrsaliye Arşivi de tam test edildi** —
+  gerçek Turso DB'sine karşı: KPI hesaplama (Üretim=100 Kg, Fire=10 Kg),
+  düşük stok kontrolü; yeni ürün tanımlama + başlangıç stoğu kilitleme,
+  mevcut ürün güncellemesinde fiyat değişip kilidin korunması; irsaliye
+  kaydetme (foto zorunlu — fotoğrafsız reddediliyor), tutar/firma/not
+  alanlarının doğru saklanması — hepsi geçti. Playwright ile üçü de gerçek
+  veriyle, hiçbir hata banner'ı olmadan render olduğu doğrulandı (Rapor'un
+  çubuk grafiği dahil).
 
-## Sıradaki adım
+## Durum
 
-`python3 main.py` ile dene, geri bildirim ver — beğenirsen kalan ekranlara
-(Rapor, Barkod Eşleştirme, İrsaliye Arşivi) geçeriz, sonunda hepsini bu
-depoya (`stoktakipfletui`) push'larız.
+Artık kanıt-of-concept kapsamındaki **tüm ana ekranlar tamam**: Rol Seçimi,
+Üretim/Satış/Admin dashboard'ları, Genel Tablo, Satışlar & Firmalar, Rapor,
+Ürün/Barkod Eşleştirme, İrsaliye Arşivi (+OCR). `python3 main.py` ile son
+bir kez dene — sorun yoksa bu depoya (`stoktakipfletui`) push'larız.
