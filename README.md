@@ -61,6 +61,14 @@ ile gerçek bir Android uygulaması olarak paketlenebiliyor.
   tarayıcı sekmesinde değil. Önceden web/PySide6 sürümlerinde de sabit
   kodluydu (Teneke≤5, Kg≤50, Adet≤10); aynı varsayılanlar korunuyor.
 
+- **Kullanıcı hesapları + giriş ekranı** — admin, Kullanıcı Yönetimi'nden
+  isim+şifre+rol ile hesap tanımlayabiliyor; en az bir hesap tanımlanınca
+  açılışta serbest Rol Seçimi yerine giriş ekranı çıkıyor, "Beni Hatırla"
+  ile cihaz bazlı otomatik giriş yapılabiliyor. Header'da her sekmeden
+  erişilebilen tek bir "Senkronize Et" butonu var. Detaylar için aşağıdaki
+  "Kullanıcı hesapları, giriş ekranı, senkron ve ortalanmış ekranlar"
+  bölümüne bakın.
+
 **Henüz yok**: Sheets senkron, Ayarlar'ı sonradan düzenleme ekranı — ikisi
 de PySide6 sürümünde de ikincil/opsiyonel özellikler, kanıt kapsamının
 dışında tutuldu.
@@ -254,16 +262,86 @@ veritabanına erişip girdi yapabildiği" UI'dan bağımsız, doğrudan fonksiyo
   uyarı banner'ı gizlenince eski metni temizlemiyordu (görsel olarak
   zararsız ama testi/kodu okuyanı yanıltabilirdi).
 
+## Kullanıcı hesapları, giriş ekranı, senkron ve ortalanmış ekranlar (bu tur)
+
+Kullanıcı isteği: her sayfaya SQL'e senkronize eden bir buton (otomatik
+senkron korunarak), admin paneline isim+şifreyle kullanıcı tanımlama, ve
+açılışta giriş ekranı + "Beni Hatırla".
+
+- **"Senkronize Et"** — her sayfadan ayrı ayrı değil, **header'da tek, her
+  sekmeden görünen bir buton** olarak eklendi (`main.py::_sync_now`) —
+  header sekmeler arasında değişmediği için 6+ sayfaya aynı butonu ayrı
+  ayrı kopyalamak yerine DRY bir çözüm. Otomatik senkron (her kayıt
+  sonrası zaten var olan davranış) aynen korunuyor; bu buton sadece
+  **elle, anında** taze veri çekmek/göndermek isteyenler için ek bir yol.
+  İstersen her sayfaya kendi butonunu da eklerim, şimdilik bu tasarım
+  tercihiyle ilerledim.
+- **Kullanıcı Yönetimi** (`ui/dialog_user_management.py`, admin'e özel,
+  header'dan açılıyor) — isim + şifre + rol ile hesap tanımlama/düzenleme/
+  silme. Şifreler **düz metin olarak hiçbir yerde saklanmıyor**:
+  `core/auth.py`, PBKDF2-HMAC-SHA256 + kullanıcıya özel rastgele `salt` +
+  200.000 iterasyonla hash'liyor, DB'ye sadece `passwordHash`/`passwordSalt`
+  yazılıyor. **Neden Turso/libSQL'in kendi "login role" mekanizması değil
+  de bir `users` tablosu?** — Turso yalnızca *tüm veritabanına* erişim için
+  tek bir bağlantı token'ı sağlıyor; Postgres'teki `CREATE ROLE ... LOGIN`
+  gibi, veritabanı içinde ayrı ayrı uygulama kullanıcıları tanımlayan bir
+  mekanizma yok. Yani mağaza personelinin adıyla/şifresiyle giriş yapması
+  için tek pratik/standart yöntem, hash'lenmiş şifrelerin tutulduğu bir
+  uygulama-seviyesi tablo — büyük servislerin (Firebase, Supabase dahil)
+  içeride yaptığı da bu.
+- **Giriş ekranı** (`ui/page_login.py`) — sadece `state.users` doluysa
+  gösteriliyor; hiç kullanıcı tanımlanmamışken (yeni kurulum ya da bu
+  özellikten önceki mevcut kullanım) eski serbest Rol Seçimi ekranı **hiç
+  bozulmadan** çalışmaya devam ediyor — admin, Kullanıcı Yönetimi'nden ilk
+  hesabı tanımlayınca bir sonraki açılıştan itibaren giriş ekranına geçiliyor.
+- **"Beni Hatırla"** — şifre hiçbir zaman cihazda saklanmıyor; sadece
+  rastgele bir oturum belirteci (`generate_remember_token`) hem cihazda
+  (Flet `SharedPreferences`) hem o kullanıcının DB satırında tutulup
+  açılışta karşılaştırılıyor. Şifre değişince (ya da yeni şifre verilince)
+  DB'deki belirteç temizleniyor — yani şifre sıfırlanan bir hesabın eski
+  "hatırlanan" oturumları **tüm cihazlarda** otomatik iptal oluyor. Bu, o
+  cihaz fiziksel olarak aynı kaldığı sürece (telefon değişmediği sürece)
+  tekrar şifre sormadan giren "Google ile Giriş Yap"a benzer bir sonuç
+  veriyor — ayrı bir Google/Firebase OAuth entegrasyonuna (ki bu paket
+  adı+SHA-1 fingerprint için ayrı bir Google Cloud projesi kurulumu
+  gerektirir) şimdilik gerek bırakmıyor.
+- **11. gerçek hata bulunup düzeltildi — ekran ortalama**: kullanıcı,
+  tek başına duran ekranların (Ayarlar/Giriş/Rol Seçimi) pencere sol
+  üstüne sabit kaldığını, ekran boyutuna göre otomatik ortalanmadığını
+  fark etti. `page.horizontal_alignment`/`vertical_alignment=CENTER` ile
+  düzeltilmeye çalışılırken **iki ayrı gizli Flet/Flutter davranışı**
+  ortaya çıktı: (1) `page.scroll` açıkken bir alanda `autofocus=True`
+  olması, Flutter'ın o alanı görünüre getirmek için sayfayı sol-üste
+  kaydırmasına yol açıp ortalamayı bozuyordu — sayfa seviyesinde scroll'u
+  kapatarak düzeltildi (taşma olursa zaten alt bileşenler kendi scroll'unu
+  kullanıyor); (2) `ft.Checkbox` tek başına bir `Column` içinde tam
+  genişliğe yayılan bir kutu raporluyor, bu da onu içeren `Column`'un
+  "ortalanması"nı anlamsızlaştırıyordu (zaten tam genişlik olduğu için
+  ortalamanın hiçbir görünür etkisi olmuyordu) — `ft.Row([checkbox],
+  tight=True)` ile checkbox'ı kendi doğal genişliğine sıkıştırıp
+  düzeltildi. Artık Giriş/Ayarlar/Rol Seçimi ekranları hem masaüstü hem
+  telefon boyutunda (420px genişlik dahil test edildi) otomatik olarak
+  hem yatayda hem dikeyde ortalanıyor.
+- ✅ **Uçtan uca Playwright doğrulaması**: Ayarlar kaydet → (yeni)
+  kullanıcı varken otomatik olarak Giriş ekranına düşme → doğru
+  kullanıcı adı/şifreyle giriş → "Beni Hatırla" işaretli giriş →
+  Dashboard'da kimlik rozeti (`"ad — Rol"`) + "Çıkış Yap" (artık "Rol
+  Değiştir" değil) görünmesi → "Senkronize Et" hatasız çalışması →
+  "Çıkış Yap" ile ortalanmış Giriş ekranına geri dönülmesi — hepsi
+  gerçek Turso DB'sine karşı, sıfır `PAGEERROR` ile doğrulandı.
+
 ## Durum
 
-Artık kanıt-of-concept kapsamındaki **tüm ana ekranlar tamam ve görsel
-olarak cilalanmış**: Rol Seçimi, Üretim/Satış/Admin dashboard'ları, Genel
-Tablo, Satışlar & Firmalar, Rapor, Ürün/Barkod Eşleştirme, İrsaliye Arşivi
-(+OCR). `python3 main.py` ile son bir kez dene — sorun yoksa bu depoya
-(`stoktakipfletui`) push'larız.
+Artık kanıt-of-concept kapsamındaki **tüm ana ekranlar + hesap/giriş
+sistemi tamam ve görsel olarak cilalanmış**: Rol Seçimi, Üretim/Satış/Admin
+dashboard'ları, Genel Tablo, Satışlar & Firmalar, Rapor, Ürün/Barkod
+Eşleştirme, İrsaliye Arşivi (+OCR), Giriş ekranı + Beni Hatırla + Kullanıcı
+Yönetimi + Senkronize Et. `python3 main.py` ile `http://localhost:8551`
+üzerinden denenebilir.
 
 **Henüz yapılmadı**: gerçek bir Android APK üretimi (`flet build apk`) —
-bu, Android SDK/Java/Gradle kurulu gerçek bir makine (ya da GitHub Actions
-gibi bir CI) gerektiriyor, bu sandbox'ta yapılamıyor. İstersen bunun için
-ayrı bir GitHub Actions workflow'u kurabiliriz (stoktakipapp'in PySide6
-paketleme workflow'una benzer şekilde).
+bu, Android SDK/Java/Gradle kurulu gerçek bir makine (Android Studio) ya da
+GitHub Actions gibi bir CI gerektiriyor, bu sandbox'ta yapılamıyor.
+Kullanıcı bunu kendi makinesinde Android Studio üzerinden deneyecek;
+istenirse bunun için ayrı bir GitHub Actions workflow'u da kurulabilir
+(stoktakipapp'in PySide6 paketleme workflow'una benzer şekilde).

@@ -44,6 +44,13 @@ WAYBILL_COLUMNS = [
     "tutar", "notlar", "fotoUrl", "okunanMetin", "eklenmeTarihi",
 ]
 
+# Bu tablo web app/PySide6 sürümünde YOK — sadece bu Flet sürümüne özgü,
+# admin panelinden kullanıcı tanımlama + giriş ekranı için eklendi. Şifre asla
+# düz metin saklanmıyor (core/auth.py::hash_password, tuzlu PBKDF2-HMAC-SHA256).
+USER_COLUMNS = [
+    "id", "name", "passwordHash", "passwordSalt", "role", "rememberToken", "createdAt",
+]
+
 _SCHEMA_STATEMENTS = [
     """
     CREATE TABLE IF NOT EXISTS records (
@@ -93,6 +100,17 @@ _SCHEMA_STATEMENTS = [
         value TEXT
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        passwordHash TEXT,
+        passwordSalt TEXT,
+        role TEXT,
+        rememberToken TEXT,
+        createdAt TEXT
+    )
+    """,
 ]
 
 
@@ -110,6 +128,7 @@ class AllData:
     companies: list[dict] = field(default_factory=list)
     sales: list[dict] = field(default_factory=list)
     waybills: list[dict] = field(default_factory=list)
+    users: list[dict] = field(default_factory=list)
     sheetsUrl: str = ""
     profile: str | None = None
     updatedAt: str | None = None
@@ -213,6 +232,7 @@ class DbCore:
             companies=self._read_table("companies", COMPANY_COLUMNS),
             sales=self._read_table("sales", SALE_COLUMNS),
             waybills=self._read_table("waybills", WAYBILL_COLUMNS),
+            users=self._read_table("users", USER_COLUMNS),
             sheetsUrl=self._get_meta("sheetsUrl") or "",
             profile=self._get_meta("profile"),
             updatedAt=self._get_meta("updatedAt"),
@@ -225,6 +245,7 @@ class DbCore:
         companies: list[dict] | None = None,
         sales: list[dict] | None = None,
         waybills: list[dict] | None = None,
+        users: list[dict] | None = None,
         sheets_url: str | None = None,
         profile: str | None = None,
         low_stock_thresholds: str | None = None,
@@ -232,6 +253,7 @@ class DbCore:
         deleted_company_ids: list[str] | None = None,
         deleted_sale_ids: list[str] | None = None,
         deleted_waybill_ids: list[str] | None = None,
+        deleted_user_ids: list[str] | None = None,
     ) -> str:
         if records is not None:
             self._upsert_rows("records", RECORD_COLUMNS, records)
@@ -252,6 +274,11 @@ class DbCore:
             self._upsert_rows("waybills", WAYBILL_COLUMNS, waybills)
         if deleted_waybill_ids:
             self._delete_rows("waybills", deleted_waybill_ids)
+
+        if users is not None:
+            self._upsert_rows("users", USER_COLUMNS, users)
+        if deleted_user_ids:
+            self._delete_rows("users", deleted_user_ids)
 
         if sheets_url is not None:
             self._set_meta("sheetsUrl", sheets_url)

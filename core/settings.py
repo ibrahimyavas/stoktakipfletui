@@ -32,6 +32,13 @@ class AppSettings:
     # Görünüm: "dark" / "light" / "system" + serbestçe seçilebilir aksan rengi.
     theme_mode: str = "dark"
     accent_color: str = "#10B981"
+    # "Beni Hatırla" — bu CİHAZA özel (SharedPreferences, DB'ye yazılmıyor).
+    # Şifre değil, sadece kullanıcı adı + rastgele bir oturum belirteci
+    # (core/auth.py::generate_remember_token) saklanıyor; belirteç ayrıca
+    # o kullanıcının DB satırında da tutulup açılışta karşılaştırılıyor —
+    # eşleşmezse (ör. şifre sıfırlandıysa) otomatik giriş yapılmaz.
+    remembered_username: str = ""
+    remembered_token: str = ""
 
     def is_configured(self) -> bool:
         return bool(self.turso_database_url and self.turso_auth_token)

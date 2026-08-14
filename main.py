@@ -15,15 +15,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import flet as ft
 
 from core.app_state import AppState
+from core.auth import generate_remember_token
 from core.db_core import DbCore
 from core.models import PAGE_LABELS, PROFILES
 from core.settings import AppSettings, load_settings, save_settings
 from ui.dashboard_common import DashboardBase
 from ui.dialog_barcode_mapper import BarcodeMapperDialog
+from ui.dialog_user_management import UserManagementDialog
 from ui.dialog_waybill_vault import WaybillVaultDialog
 from ui.page_dashboard_satis import SatisDashboard
 from ui.page_dashboard_uretim import UretimDashboard
 from ui.page_genel import GenelPage
+from ui.page_login import build_login_screen
 from ui.page_rapor import RaporPage
 from ui.page_satislar import SatislarPage
 from ui.profile_selector import build_profile_selector
@@ -51,6 +54,29 @@ async def _load_settings_with_retry(prefs: ft.SharedPreferences, attempts: int =
     raise last_exc
 
 
+def _center_screen(page: ft.Page) -> None:
+    """Tek başına duran ekranları (ayarlar, giriş, rol seçimi, hata/yükleniyor
+    durumları) pencere/ekran boyutu ne olursa olsun ortalar — Flet bunu
+    page.horizontal_alignment/vertical_alignment ile otomatik olarak mevcut
+    ekran boyutuna göre yeniden hesaplıyor, sabit bir piksel koordinatı
+    vermemize gerek kalmıyor. Ana kabuk (dashboard) bunun tam tersini ister
+    (tam genişlik, sol üstten başlayan düzen) — bkz. _uncenter_screen."""
+    # Not: page.scroll'u burada AÇMIYORUZ — sayfa scroll edilebilir olunca
+    # bir alanda autofocus (ör. giriş ekranındaki Kullanıcı Adı) Flutter'ı
+    # o alanı görünüre getirmek için sayfayı sol üste kaydırıyor, bu da
+    # ortalamayı bozuyordu. Ortalamak için sadece hizalama yeterli; taşma
+    # olursa (çok küçük ekran) içerik kırpılmak yerine kendi bünyesindeki
+    # Column'lar (ör. Kullanıcı Yönetimi listesi) zaten kendi scroll'una
+    # sahip.
+    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+    page.vertical_alignment = ft.MainAxisAlignment.CENTER
+
+
+def _uncenter_screen(page: ft.Page) -> None:
+    page.horizontal_alignment = ft.CrossAxisAlignment.START
+    page.vertical_alignment = ft.MainAxisAlignment.START
+
+
 async def main(page: ft.Page) -> None:
     page.title = "Üretim & Satış Defteri"
     page.padding = 20
@@ -71,6 +97,7 @@ async def main(page: ft.Page) -> None:
         # "Tekrar Dene" ekranıyla düzeltildi.
         page.theme_mode = ft.ThemeMode.DARK
         page.controls.clear()
+        _center_screen(page)
         page.add(
             ft.Column(
                 [
@@ -90,6 +117,7 @@ async def main(page: ft.Page) -> None:
         return
 
     page.controls.clear()
+    _center_screen(page)
     page.add(ft.Row([ft.ProgressRing(), ft.Text("Veritabanına bağlanılıyor...")]))
     page.update()
 
@@ -99,6 +127,7 @@ async def main(page: ft.Page) -> None:
         )
     except Exception as exc:  # noqa: BLE001
         page.controls.clear()
+        _center_screen(page)
         page.add(
             ft.Column(
                 [
@@ -114,10 +143,77 @@ async def main(page: ft.Page) -> None:
     state = AppState(db)
     await asyncio.to_thread(state.load_all)
 
-    if state.profile and state.profile in PROFILES:
+    if state.users:
+        # Hesap-tabanlı mod: admin en az bir kullanıcı tanımlamış. "Beni
+        # Hatırla" ile bırakılmış geçerli bir oturum varsa (kullanıcı adı +
+        # belirteç HEM bu cihazda HEM o kullanıcının DB satırında eşleşiyorsa
+        # — şifre sıfırlanınca DB tarafı temizlenir, otomatik giriş iptal
+        # olur) doğrudan içeri alınır; yoksa giriş ekranı gösterilir.
+        remembered_user = None
+        if settings.remembered_username and settings.remembered_token:
+            candidate = next(
+                (u for u in state.users if (u.get("name") or "") == settings.remembered_username), None
+            )
+            if candidate and candidate.get("rememberToken") and candidate["rememberToken"] == settings.remembered_token:
+                remembered_user = candidate
+        if remembered_user:
+            _show_main_shell(page, state, remembered_user["role"], prefs, settings, current_user=remembered_user)
+        else:
+            _show_login(page, state, prefs, settings)
+    elif state.profile and state.profile in PROFILES:
+        # Eski serbest rol modu — hiç kullanıcı tanımlanmamışken (yeni
+        # kurulum ya da bu özellik onaylanmadan önceki mevcut kullanım)
+        # geriye dönük uyumluluk için korunuyor. Admin, Kullanıcı
+        # Yönetimi'nden ilk hesabı tanımlayınca bir sonraki açılıştan
+        # itibaren giriş ekranına geçilir.
         _show_main_shell(page, state, state.profile, prefs, settings)
     else:
         _show_profile_selector(page, state, prefs, settings)
+
+
+def _show_login(page: ft.Page, state: AppState, prefs: ft.SharedPreferences, settings: AppSettings) -> None:
+    def on_success(user: dict, remember: bool) -> None:
+        page.run_task(_complete_login, page, state, prefs, settings, user, remember)
+
+    page.controls.clear()
+    _center_screen(page)
+    page.add(build_login_screen(page, state, on_success, remembered_username=settings.remembered_username))
+    page.update()
+
+
+async def _complete_login(
+    page: ft.Page, state: AppState, prefs: ft.SharedPreferences, settings: AppSettings, user: dict, remember: bool
+) -> None:
+    if remember:
+        token = generate_remember_token()
+        await asyncio.to_thread(state.save_users, [{**user, "rememberToken": token}])
+        user = next((u for u in state.users if u["id"] == user["id"]), user)
+        settings.remembered_username = user.get("name") or ""
+        settings.remembered_token = token
+    else:
+        settings.remembered_username = ""
+        settings.remembered_token = ""
+    await save_settings(prefs, settings)
+    _show_main_shell(page, state, user["role"], prefs, settings, current_user=user)
+
+
+async def _logout(page: ft.Page, state: AppState, prefs: ft.SharedPreferences, settings: AppSettings) -> None:
+    settings.remembered_username = ""
+    settings.remembered_token = ""
+    await save_settings(prefs, settings)
+    _show_login(page, state, prefs, settings)
+
+
+async def _sync_now(
+    page: ft.Page,
+    state: AppState,
+    role_key: str,
+    prefs: ft.SharedPreferences,
+    settings: AppSettings,
+    current_user: dict | None,
+) -> None:
+    await asyncio.to_thread(state.load_all)
+    _show_main_shell(page, state, role_key, prefs, settings, current_user=current_user)
 
 
 def _show_profile_selector(page: ft.Page, state: AppState, prefs: ft.SharedPreferences, settings: AppSettings) -> None:
@@ -125,6 +221,7 @@ def _show_profile_selector(page: ft.Page, state: AppState, prefs: ft.SharedPrefe
         page.run_task(_select_profile, page, state, role_key, prefs, settings)
 
     page.controls.clear()
+    _center_screen(page)
     page.add(build_profile_selector(on_select))
     page.update()
 
@@ -135,7 +232,14 @@ async def _select_profile(page: ft.Page, state: AppState, role_key: str, prefs: 
     _show_main_shell(page, state, role_key, prefs, settings)
 
 
-def _show_main_shell(page: ft.Page, state: AppState, role_key: str, prefs: ft.SharedPreferences, settings: AppSettings) -> None:
+def _show_main_shell(
+    page: ft.Page,
+    state: AppState,
+    role_key: str,
+    prefs: ft.SharedPreferences,
+    settings: AppSettings,
+    current_user: dict | None = None,
+) -> None:
     info = PROFILES[role_key]
     page.controls.clear()
 
@@ -149,19 +253,33 @@ def _show_main_shell(page: ft.Page, state: AppState, role_key: str, prefs: ft.Sh
     def change_profile(e) -> None:
         page.run_task(_change_profile, page, state, prefs, settings)
 
+    def do_logout(e) -> None:
+        page.run_task(_logout, page, state, prefs, settings)
+
+    def do_sync_now(e) -> None:
+        page.run_task(_sync_now, page, state, role_key, prefs, settings, current_user)
+
     def open_barcode_mapper(e) -> None:
         # Ürün/fiyat/başlangıç stoğu değişiklikleri Kayıt Defteri, Genel
         # Tablo ve Satışlar sekmelerindeki ürün listelerini de etkiliyor —
         # bu yüzden kaydedince en basit doğru çözüm olarak tüm kabuğu
         # (page_bodies dahil) taze state ile yeniden kuruyoruz.
         BarcodeMapperDialog(
-            page, state, on_saved=lambda: _show_main_shell(page, state, role_key, prefs, settings)
+            page, state,
+            on_saved=lambda: _show_main_shell(page, state, role_key, prefs, settings, current_user=current_user),
         ).open()
 
     def open_waybill_vault(e) -> None:
         # İrsaliye ekleme/silme diğer sekmeleri etkilemiyor, dialog kendi
         # listesini zaten kendi içinde tazeliyor.
         WaybillVaultDialog(page, state, settings.gemini_api_key, on_saved=lambda: None).open()
+
+    def open_user_management(e) -> None:
+        UserManagementDialog(
+            page, state,
+            current_user_id=(current_user or {}).get("id"),
+            on_saved=lambda: _show_main_shell(page, state, role_key, prefs, settings, current_user=current_user),
+        ).open()
 
     # Not: yeni Flet sürümünde ft.Tab sadece başlığı temsil ediyor — içerik
     # ft.TabBarView ile eşleştiriliyor (Tabs'ın kendi kabul ettiği yapı).
@@ -211,30 +329,55 @@ def _show_main_shell(page: ft.Page, state: AppState, role_key: str, prefs: ft.Sh
         ),
     )
 
-    header = ft.Row(
-        [
-            ft.Icon(ft.Icons.INVENTORY, color=info.color, size=22),
-            ft.Text("Üretim & Satış Defteri", weight=ft.FontWeight.BOLD, size=16),
-            ft.Container(
-                content=ft.Text(info.label, color=info.color, weight=ft.FontWeight.BOLD),
-                bgcolor=ft.Colors.with_opacity(0.15, info.color),
-                border_radius=8,
-                padding=ft.Padding(10, 3, 10, 3),
-            ),
-            saving_text,
-            ft.Container(expand=True),
-            # Not: bu Row'a asla wrap=True verme — expand=True olan `tabs`
-            # Column'ının altındaki TÜM içeriği sessizce (hiçbir hata izi
-            # bırakmadan) gri bir kutuya çeviren gerçek bir Flet/Flutter
-            # bug'ı bulundu ve doğrulandı. Buton metinlerini kısa tutup
-            # dar ekranlarda yatay kaydırmaya izin vermek daha güvenli.
-            ft.OutlinedButton("Barkod Eşleştirme", icon=ft.Icons.QR_CODE_2, on_click=open_barcode_mapper),
-            ft.OutlinedButton("İrsaliye Arşivi", icon=ft.Icons.DESCRIPTION, on_click=open_waybill_vault),
-            ft.OutlinedButton("Rol Değiştir", icon=ft.Icons.SWAP_HORIZ, on_click=change_profile),
-        ],
-        scroll=ft.ScrollMode.AUTO,
+    identity_chip: ft.Control
+    if current_user:
+        identity_chip = ft.Container(
+            content=ft.Text(f"{current_user.get('name')} — {info.label}", color=info.color, weight=ft.FontWeight.BOLD),
+            bgcolor=ft.Colors.with_opacity(0.15, info.color),
+            border_radius=8,
+            padding=ft.Padding(10, 3, 10, 3),
+        )
+    else:
+        identity_chip = ft.Container(
+            content=ft.Text(info.label, color=info.color, weight=ft.FontWeight.BOLD),
+            bgcolor=ft.Colors.with_opacity(0.15, info.color),
+            border_radius=8,
+            padding=ft.Padding(10, 3, 10, 3),
+        )
+
+    # Hesap-tabanlı mod (current_user var): "Rol Değiştir" yerine "Çıkış
+    # Yap" — rol artık kullanıcı hesabına bağlı, serbestçe değiştirilmiyor.
+    # Eski serbest-rol modunda (current_user yok) davranış aynı kalıyor.
+    account_action = (
+        ft.OutlinedButton("Çıkış Yap", icon=ft.Icons.LOGOUT, on_click=do_logout)
+        if current_user
+        else ft.OutlinedButton("Rol Değiştir", icon=ft.Icons.SWAP_HORIZ, on_click=change_profile)
     )
 
+    header_controls = [
+        ft.Icon(ft.Icons.INVENTORY, color=info.color, size=22),
+        ft.Text("Üretim & Satış Defteri", weight=ft.FontWeight.BOLD, size=16),
+        identity_chip,
+        saving_text,
+        ft.Container(expand=True),
+        # Not: bu Row'a asla wrap=True verme — expand=True olan `tabs`
+        # Column'ının altındaki TÜM içeriği sessizce (hiçbir hata izi
+        # bırakmadan) gri bir kutuya çeviren gerçek bir Flet/Flutter
+        # bug'ı bulundu ve doğrulandı. Buton metinlerini kısa tutup dar
+        # ekranlarda yatay kaydırmaya izin vermek daha güvenli.
+        ft.OutlinedButton("Senkronize Et", icon=ft.Icons.CLOUD_SYNC, on_click=do_sync_now),
+        ft.OutlinedButton("Barkod Eşleştirme", icon=ft.Icons.QR_CODE_2, on_click=open_barcode_mapper),
+        ft.OutlinedButton("İrsaliye Arşivi", icon=ft.Icons.DESCRIPTION, on_click=open_waybill_vault),
+    ]
+    if role_key == "admin":
+        header_controls.append(
+            ft.OutlinedButton("Kullanıcı Yönetimi", icon=ft.Icons.MANAGE_ACCOUNTS, on_click=open_user_management)
+        )
+    header_controls.append(account_action)
+
+    header = ft.Row(header_controls, scroll=ft.ScrollMode.AUTO)
+
+    _uncenter_screen(page)
     page.add(ft.Column([header, tabs], expand=True))
     page.update()
 
@@ -247,6 +390,7 @@ async def _change_profile(page: ft.Page, state: AppState, prefs: ft.SharedPrefer
 
 def _show_first_run_settings(page: ft.Page, prefs: ft.SharedPreferences, settings: AppSettings) -> None:
     page.controls.clear()
+    _center_screen(page)
 
     url_field = ft.TextField(label="Turso Database URL *", value=settings.turso_database_url, width=420)
     token_field = ft.TextField(label="Turso Auth Token *", value=settings.turso_auth_token, password=True, can_reveal_password=True, width=420)

@@ -74,7 +74,9 @@ def build_profile_selector(on_select: Callable[[str], None]) -> ft.Control:
                     ft.Container(_role_card(role_key, on_select), col={"sm": 12, "md": 4})
                     for role_key in ("uretim", "satis", "admin")
                 ],
+                alignment=ft.MainAxisAlignment.CENTER,
             ),
         ],
         spacing=10,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
     )

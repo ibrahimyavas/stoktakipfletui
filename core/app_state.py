@@ -22,6 +22,7 @@ class AppState:
         self.companies: list[dict] = []
         self.sales: list[dict] = []
         self.waybills: list[dict] = []
+        self.users: list[dict] = []
         self.sheets_url: str = ""
         self.profile: str | None = None
         self.updated_at: str | None = None
@@ -33,6 +34,7 @@ class AppState:
         self.companies = data.companies
         self.sales = data.sales
         self.waybills = data.waybills
+        self.users = data.users
         self.sheets_url = data.sheetsUrl
         self.profile = data.profile
         self.updated_at = data.updatedAt
@@ -69,3 +71,7 @@ class AppState:
     def save_low_stock_thresholds(self, thresholds_json: str) -> None:
         self.db.save_all_data(low_stock_thresholds=thresholds_json)
         self.low_stock_thresholds = thresholds_json
+
+    def save_users(self, upsert: list[dict] | None = None, deleted_ids: list[str] | None = None) -> None:
+        self.db.save_all_data(users=upsert, deleted_user_ids=deleted_ids)
+        self.load_all()
