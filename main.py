@@ -22,8 +22,20 @@ from ui.dashboard_common import DashboardBase
 from ui.page_dashboard_satis import SatisDashboard
 from ui.page_dashboard_uretim import UretimDashboard
 from ui.page_genel import GenelPage
+from ui.page_satislar import SatislarPage
 from ui.profile_selector import build_profile_selector
 from ui.theme import apply_theme
+
+
+async def _load_settings_with_retry(prefs: ft.SharedPreferences, attempts: int = 2) -> AppSettings:
+    last_exc: Exception | None = None
+    for _ in range(attempts):
+        try:
+            return await load_settings(prefs)
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+    assert last_exc is not None
+    raise last_exc
 
 
 async def main(page: ft.Page) -> None:
@@ -33,7 +45,31 @@ async def main(page: ft.Page) -> None:
     prefs = ft.SharedPreferences()
     page.services.append(prefs)
 
-    settings = await load_settings(prefs)
+    try:
+        settings = await _load_settings_with_retry(prefs)
+    except Exception as exc:  # noqa: BLE001
+        # SharedPreferences.get() içeride ~10 saniye sabit bir zaman
+        # aşımına sahip (flet kütüphanesi tarafında, dışarıdan
+        # değiştirilemiyor) — yavaş bir ağ/tarayıcı altında (özellikle
+        # Android/zayıf bağlantı hedefi düşünülünce beklenmedik değil) bu
+        # aşılabiliyordu ve önceden tüm oturum burada sessizce çöküp
+        # kullanıcı kalıcı olarak boş/tepkisiz bir ekranda kalıyordu — hiç
+        # geri bildirim yoktu. 2 deneme + en azından kurtarılabilir bir
+        # "Tekrar Dene" ekranıyla düzeltildi.
+        page.theme_mode = ft.ThemeMode.DARK
+        page.controls.clear()
+        page.add(
+            ft.Column(
+                [
+                    ft.Text("Ayarlar okunamadı.", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.RED),
+                    ft.Text(f"Muhtemelen yavaş/kararsız bir bağlantı ({exc})."),
+                    ft.FilledButton("Tekrar Dene", on_click=lambda e: page.run_task(main, page)),
+                ]
+            )
+        )
+        page.update()
+        return
+
     apply_theme(page, settings.theme_mode, settings.accent_color)
 
     if not settings.is_configured():
@@ -120,6 +156,8 @@ def _show_main_shell(page: ft.Page, state: AppState, role_key: str, prefs: ft.Sh
                 ).control
         elif page_key == "genel":
             body = GenelPage(page, state).control
+        elif page_key == "satis":
+            body = SatislarPage(page, state, on_saving=set_saving).control
         else:
             body = ft.Container(
                 ft.Text(f"{PAGE_LABELS.get(page_key, page_key)} — bu ekran henüz eklenmedi (bu kanıt-of-concept sürümde).", italic=True),

@@ -26,12 +26,19 @@ ile gerçek bir Android uygulaması olarak paketlenebiliyor.
   (Flutter'ın `shared_preferences` paketi) — Android/iOS'ta da çalışır.
 - **Tema**: Material 3 `color_scheme_seed` ile açık/koyu + serbest aksan
   rengi (PySide6 sürümündeki elle-XML-üretme yerine yerleşik).
+- **Satışlar & Firmalar** (`ui/page_satislar.py`) — PySide6 sürümündeki
+  `page_satis.py` + `dialog_complete_sale.py` + `dialog_qr.py`'nin Flet
+  karşılığı, 4 alt sekme: **Stok & Yeni Satış** (stok tablosu + hızlı satış
+  başlatma), **Bekleyen Satışlar** (Defter'de satış miktarı girilmiş ama
+  henüz firmaya işlenmemiş kayıtlar), **Firmalar** (firma CRUD), **Satış
+  Listesi** (arama + QR fiş + sil). "Satışı Tamamla / Firmaya İşle" akışı
+  (`_complete_sale()` — UI'dan bağımsız, doğrudan test edilebilir bir
+  metod) hem "Yeni Satış Başlat" hem "Bekleyen Satışlar" tarafından
+  paylaşılıyor. QR kodu `qrcode` kütüphanesiyle tamamen yerel/offline
+  üretiliyor (web sürümündeki gibi harici bir API'ye bağımlı değil).
 
-**Henüz yok** (kanıt onaylanınca eklenecek): "Satışlar & Firmalar" sayfası
-(firma yönetimi, bekleyen satışlar, Satışı Tamamla diyaloğu — Kayıt
-Defteri'ndeki satış girişinden farklı, ayrı bir ekran), Rapor, Barkod
-Eşleştirme, İrsaliye Arşivi (+OCR), Sheets senkron, Ayarlar'ı sonradan
-düzenleme ekranı.
+**Henüz yok** (kanıt onaylanınca eklenecek): Rapor, Barkod Eşleştirme,
+İrsaliye Arşivi (+OCR), Sheets senkron, Ayarlar'ı sonradan düzenleme ekranı.
 
 ## Neden `core/` PySide6 sürümüyle aynı?
 
@@ -111,8 +118,27 @@ flet run --web main.py
   Defteri içinde sadece "Üretim / Fire" + "Stok & Fiyat" sekmelerini
   görüyor (Satış'a hiç erişimi yok) — Satış rolü de simetrik şekilde
   sadece kendi alanlarını görüyor.
+- ✅ **Satışlar & Firmalar tam olarak test edildi** — gerçek Turso DB'ye
+  karşı: firma oluşturma, stoğu aşan satışın reddedilmesi, hızlı satış
+  başlatma + stok zincirinin doğru güncellenmesi (100 Kg − 20 Kg = 80 Kg),
+  yeni satışın "Bekleyen Satışlar"da görünmesi, firma seçilmeden satışın
+  reddedilmesi, "Satışı Tamamla" ile SaleItem oluşturulması + Defter
+  kaydının `satisId`/`linkedSaleId` ile güncellenmesi + tutar hesaplaması
+  (20 Kg × ₺15 = ₺300), tamamlanan satışın artık bekleyenlerde
+  görünmemesi, geçerli bir QR PNG üretilmesi, satışı olan firmanın
+  silinememesi — hepsi geçti. Ayrıca Playwright ile 4 alt sekmenin de
+  (Stok & Yeni Satış, Bekleyen Satışlar, Firmalar, Satış Listesi) gerçek
+  veriyle hatasız render olduğu doğrulandı.
+- ✅ **8. gerçek hata bulunup düzeltildi**: `SharedPreferences.get()`'in
+  flet kütüphanesi içinde ~10 saniyelik sabit bir zaman aşımı var; yavaş
+  bir ağ/tarayıcı altında (Android/zayıf bağlantı hedefi için gerçekçi bir
+  senaryo) bu aşılabiliyor ve önceden **tüm oturum sessizce çöküyor**,
+  kullanıcı kalıcı olarak tepkisiz bir ekranda kalıyordu — hiçbir geri
+  bildirim yoktu. `main.py`'da 2 deneme + kurtarılabilir bir "Tekrar Dene"
+  ekranıyla düzeltildi.
 
 ## Sıradaki adım
 
 `python3 main.py` ile dene, geri bildirim ver — beğenirsen kalan ekranlara
-geçeriz, sonunda hepsini bu depoya (`stoktakipfletui`) push'larız.
+(Rapor, Barkod Eşleştirme, İrsaliye Arşivi) geçeriz, sonunda hepsini bu
+depoya (`stoktakipfletui`) push'larız.
