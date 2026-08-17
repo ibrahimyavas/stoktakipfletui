@@ -466,9 +466,10 @@ Eşleştirme, İrsaliye Arşivi (+OCR), Giriş ekranı + Beni Hatırla + Kullan�
 Yönetimi + Senkronize Et. `python3 main.py` ile `http://localhost:8551`
 üzerinden denenebilir.
 
-**Henüz yapılmadı**: gerçek bir Android APK üretimi (`flet build apk`) —
-bu, Android SDK/Java/Gradle kurulu gerçek bir makine (Android Studio) ya da
-GitHub Actions gibi bir CI gerektiriyor, bu sandbox'ta yapılamıyor.
-Kullanıcı bunu kendi makinesinde Android Studio üzerinden deneyecek;
-istenirse bunun için ayrı bir GitHub Actions workflow'u da kurulabilir
-(stoktakipapp'in PySide6 paketleme workflow'una benzer şekilde).
+**Android APK derlemesi artık ayrı bir repoda**:
+[ibrahimyavas/Stoktakipandroidapp](https://github.com/ibrahimyavas/Stoktakipandroidapp)
+— Android SDK/Java/Gradle gerektirdiği için bu sandbox'ta yapılamıyor,
+GitHub Actions'a taşındı. O repo bu koddan bir KOPYA değil; her derlemede
+buradaki (`stoktakipfletui`) kodu taze çekip üzerinde `flet build apk`
+çalıştırıyor — yani geliştirme her zaman burada devam ediyor, tek gerçek
+kaynak bu repo.
