@@ -151,7 +151,13 @@ class DashboardBase:
                 ft.Card(content=card_container),
                 ft.Container(height=8),
                 self.search_field,
-                ft.Container(content=self.table, expand=True),
+                # Tabloyu yatay kaydırılabilir bir Row'a sarmadan, dar
+                # (telefon) ekranlarda sütunların bir kısmı görünmeden
+                # kırpılıyordu — gerçek bir Android cihazda test edilerek
+                # bulundu. scroll=AUTO burada güvenli (wrap=True DEĞİL —
+                # o, expand=True bir Column'a komşuyken ayrı, bilinen bir
+                # Flet hatasına yol açıyordu, bkz. header'daki not).
+                ft.Row([self.table], scroll=ft.ScrollMode.AUTO, expand=True),
             ],
             expand=True,
             scroll=ft.ScrollMode.AUTO,

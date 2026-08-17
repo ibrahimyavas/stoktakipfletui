@@ -47,8 +47,11 @@ ile gerçek bir Android uygulaması olarak paketlenebiliyor.
   (kilitlenince Kayıt Defteri'nde o ürünün başlangıç stoğu alanı salt-okunur
   olur), kayıtlı ürün/barkod listesi + arama.
 - **İrsaliye Arşivi** (`ui/dialog_waybill_vault.py`) — header'dan açılan bir
-  diyalog: dosya seçiciyle fotoğraf ekleme (kamera yok — bilinçli kapsam
-  dışı), Gemini OCR ile otomatik alan doldurma (`core/ocr.py` — PySide6
+  diyalog: dosya seçiciyle fotoğraf ekleme — Android'de `CAMERA` izni +
+  `FilePickerFileType.IMAGE` sayesinde sistem seçicisinin "Kamera" seçeneği
+  de kullanılabiliyor (canlı barkod/QR tarama hâlâ bilinçli kapsam dışı,
+  bu sadece yeni bir fotoğraf çekmek için), Gemini OCR ile otomatik alan
+  doldurma (`core/ocr.py` — PySide6
   sürümüyle birebir aynı, değiştirilmedi; sadece `FilePicker`'dan gelen
   bytes'ı OCR'ın beklediği dosya yoluna çevirmek için geçici bir dosyaya
   yazıyoruz), liste/arama/görüntüle/sil.

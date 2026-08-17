@@ -89,7 +89,7 @@ class WaybillVaultDialog:
         )
         list_tab = ft.Container(
             ft.Column(
-                [self.search_field, ft.Container(content=self.list_table, expand=True)],
+                [self.search_field, ft.Row([self.list_table], scroll=ft.ScrollMode.AUTO, expand=True)],
                 spacing=10,
                 scroll=ft.ScrollMode.AUTO,
             ),
@@ -223,8 +223,12 @@ class WaybillVaultDialog:
     # -- Ekleme --------------------------------------------------------
 
     async def _pick_photo(self) -> None:
+        # file_type=IMAGE (extension filtreleme yerine) Android'in kendi
+        # sistem seçicisini tetikliyor — bu, "Kamera" seçeneğini de (CAMERA
+        # izni verilmişse) sunuyor; ham uzantı filtresiyle sadece dosya
+        # tarayıcısı açılıyor, kamera seçeneği hiç çıkmıyordu.
         files = await self.file_picker.pick_files(
-            dialog_title="İrsaliye Fotoğrafı Seç", allowed_extensions=["png", "jpg", "jpeg"], with_data=True
+            dialog_title="İrsaliye Fotoğrafı Seç", file_type=ft.FilePickerFileType.IMAGE, with_data=True
         )
         if not files or not files[0].bytes:
             return

@@ -208,7 +208,7 @@ class ExcelImportDialog:
                 ft.Row([self.preview_btn, self.import_btn]),
                 self.summary_text,
                 ft.Text("Önizleme (ilk 5 satır):", weight=ft.FontWeight.BOLD, size=12),
-                ft.Container(content=self.preview_table, expand=True),
+                ft.Row([self.preview_table], scroll=ft.ScrollMode.AUTO, expand=True),
                 self.status_text,
             ],
             spacing=10,

@@ -60,7 +60,8 @@ class GenelPage:
                         padding=14,
                     )
                 ),
-                ft.Container(content=self.table, expand=True),
+                # Yatay kaydırma olmadan telefon ekranında sütunlar kırpılıyordu.
+                ft.Row([self.table], scroll=ft.ScrollMode.AUTO, expand=True),
             ],
             expand=True,
             scroll=ft.ScrollMode.AUTO,

@@ -120,7 +120,7 @@ class SatislarPage:
                         )
                     ),
                     ft.Container(height=8),
-                    ft.Container(content=self.stock_table, expand=True),
+                    ft.Row([self.stock_table], scroll=ft.ScrollMode.AUTO, expand=True),
                 ],
                 scroll=ft.ScrollMode.AUTO,
                 expand=True,
@@ -131,7 +131,7 @@ class SatislarPage:
             ft.Column(
                 [
                     ft.Text("Satış miktarı girilmiş ama henüz bir firmaya işlenmemiş kayıtlar:"),
-                    ft.Container(content=self.pending_table, expand=True),
+                    ft.Row([self.pending_table], scroll=ft.ScrollMode.AUTO, expand=True),
                 ],
                 scroll=ft.ScrollMode.AUTO,
                 expand=True,
@@ -155,7 +155,7 @@ class SatislarPage:
                         )
                     ),
                     ft.Container(height=8),
-                    ft.Container(content=self.company_table, expand=True),
+                    ft.Row([self.company_table], scroll=ft.ScrollMode.AUTO, expand=True),
                 ],
                 scroll=ft.ScrollMode.AUTO,
                 expand=True,
@@ -166,7 +166,7 @@ class SatislarPage:
             ft.Column(
                 [
                     self.sales_search,
-                    ft.Container(content=self.sales_table, expand=True),
+                    ft.Row([self.sales_table], scroll=ft.ScrollMode.AUTO, expand=True),
                 ],
                 scroll=ft.ScrollMode.AUTO,
                 expand=True,
@@ -467,9 +467,11 @@ class SatislarPage:
             f.on_change = refresh_total
 
         async def attach_photo(e) -> None:
+            # file_type=IMAGE, Android'in sistem seçicisindeki "Kamera"
+            # seçeneğini de (CAMERA izni verilmişse) devreye sokuyor.
             files = await self.file_picker.pick_files(
                 dialog_title="İrsaliye Fotoğrafı Seç",
-                allowed_extensions=["png", "jpg", "jpeg"],
+                file_type=ft.FilePickerFileType.IMAGE,
                 with_data=True,
             )
             if files and files[0].bytes:
