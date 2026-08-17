@@ -67,6 +67,13 @@ ile gerçek bir Android uygulaması olarak paketlenebiliyor.
   ile cihaz bazlı otomatik giriş yapılabiliyor. Header'da her sekmeden
   erişilebilen tek bir "Senkronize Et" butonu var. Detaylar için aşağıdaki
   "Kullanıcı hesapları, giriş ekranı, senkron ve ortalanmış ekranlar"
+  bölümüne bakın. Bir kullanıcıya birden fazla rol de verilebiliyor (ör.
+  hem Üretim hem Satış) — erişimler birleşiyor, detaylar "Hız iyileştirmesi
+  ve çoklu rol desteği" bölümünde.
+- **Excel / CSV İçe Aktarma** — admin, header'daki "Excel İçe Aktar"
+  butonundan herhangi bir .xlsx/.csv dosyasını Kayıt Defteri/Firmalar/
+  Satışlar'dan birine, sütunları otomatik önerilen (elle düzeltilebilir)
+  bir eşleştirmeyle aktarabiliyor. Detaylar için "Excel / CSV İçe Aktarma"
   bölümüne bakın.
 
 **Henüz yok**: Sheets senkron, Ayarlar'ı sonradan düzenleme ekranı — ikisi
@@ -368,6 +375,43 @@ fazla rol tanımlanabilmesi.
   Kayıt Defteri'nde hem Üretim/Fire hem Satış sekmelerinin, header'da hem
   4 sayfanın da (Rapor dahil) görünmesi, "Satışlar & Firmalar" sekmesinin
   tam çalışması — sıfır hata.
+
+## Excel / CSV İçe Aktarma (bu tur)
+
+Kullanıcı isteği: elde olan bir Excel dosyasının ilgili alanla eşleştirilip
+işlenebilmesi — "tablo isimlerini nasıl eşleştireceğiz" sorusuna karşılık,
+tabloya özel olmayan, tek genel bir akış kuruldu (`ui/dialog_excel_import.py`,
+admin'e özel, header'daki "Excel İçe Aktar" butonundan açılıyor):
+
+**dosya seç (.xlsx/.csv) → hedef tablo seç (Kayıt Defteri / Firmalar /
+Satışlar) → sütunlar otomatik eşleştirilir (elle düzeltilebilir) → önizle →
+onayla → tek round-trip'te yaz.**
+
+- **Otomatik sütun eşleştirme**: Excel başlığı ile hedef tablonun alan adı
+  normalize edilip (Türkçe karakter sadeleştirme, boşluk/sembol temizleme)
+  karşılaştırılıyor; birebir ya da alt-dize eşleşmesi yoksa (ör. "Barkod" vs
+  `barcode`, "Firma Adı" vs `sirketAdi`) küçük bir eş anlamlı sözlüğü devreye
+  giriyor. Hiçbir eşleştirme sessizce yanlış gitmiyor — her sütunun yanında
+  elle düzeltilebilir bir seçici var, önizleme onaylanmadan hiçbir veri
+  yazılmıyor.
+- **Güvenli atlama**: hedef tabloya göre zorunlu alan(lar) (records için
+  ürün kodu/adı, companies için ad, sales için ürün adı/firma adı) hiçbiri
+  eşleşip dolu değilse o satır sessizce değil, **sayılarak** atlanıyor
+  ("X satır aktarılacak, Y satır atlanacak"). Yanlış hedef tablo seçilirse
+  (ör. şeması hiç uymayan bir CSV) bütün satırlar güvenle atlanıyor, hiçbir
+  satır yanlış alanlara zorla yazılmıyor.
+- **id sütunu eşlenirse güncelleme, eşlenmezse yeni kayıt** — `core/db_core.py`'nin
+  var olan upsert modeliyle birebir aynı; yani Genel Tablo'dan dışa
+  aktarılmış bir CSV, Excel'de düzenlenip aynı şekilde geri içe aktarılabilir
+  (id'ler eşleştiği için satırlar güncellenir, çoğalmaz).
+- Gerçek dosyalarla test edildi: Genel Tablo'nun kendi CSV export'u (`;`
+  ayraçlı, BOM'lu, Türkçe başlıklı) doğru ayrıştırıldı ve tüm sütunlar
+  otomatik eşleşti; şeması tamamen farklı bir CSV hedef tabloyla
+  eşleşmeyince hiçbir satır yazılmadı (güvenlik testi). Gerçek tarayıcıdan,
+  gerçek dosya seçiciyle (Playwright'ın `expect_file_chooser` ile), gerçek
+  Turso DB'sine karşı uçtan uca doğrulandı: dosya seç → "Firmalar" hedefi →
+  otomatik eşleştirme → önizleme özeti doğru → içe aktar → iki satır da
+  doğru alanlarla DB'de göründü — sıfır hata.
 
 ## Durum
 

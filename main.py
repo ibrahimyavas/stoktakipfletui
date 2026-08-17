@@ -21,6 +21,7 @@ from core.models import PAGE_LABELS, PROFILES, compute_effective_access, roles_f
 from core.settings import AppSettings, load_settings, save_settings
 from ui.dashboard_common import DashboardBase
 from ui.dialog_barcode_mapper import BarcodeMapperDialog
+from ui.dialog_excel_import import ExcelImportDialog
 from ui.dialog_user_management import UserManagementDialog
 from ui.dialog_waybill_vault import WaybillVaultDialog
 from ui.page_genel import GenelPage
@@ -281,6 +282,14 @@ def _show_main_shell(
             on_saved=lambda: _show_main_shell(page, state, role_keys, prefs, settings, current_user=current_user),
         ).open()
 
+    def open_excel_import(e) -> None:
+        # Toplu yazma (potansiyel olarak yüzlerce satır) olduğu için
+        # şimdilik admin'e özel — Kullanıcı Yönetimi ile aynı gerekçe.
+        ExcelImportDialog(
+            page, state,
+            on_saved=lambda: _show_main_shell(page, state, role_keys, prefs, settings, current_user=current_user),
+        ).open()
+
     # Not: yeni Flet sürümünde ft.Tab sadece başlığı temsil ediyor — içerik
     # ft.TabBarView ile eşleştiriliyor (Tabs'ın kendi kabul ettiği yapı).
     page_bodies: list[ft.Control] = []
@@ -371,6 +380,9 @@ def _show_main_shell(
     if info.is_admin:
         header_controls.append(
             ft.OutlinedButton("Kullanıcı Yönetimi", icon=ft.Icons.MANAGE_ACCOUNTS, on_click=open_user_management)
+        )
+        header_controls.append(
+            ft.OutlinedButton("Excel İçe Aktar", icon=ft.Icons.UPLOAD_FILE, on_click=open_excel_import)
         )
     header_controls.append(account_action)
 
