@@ -11,6 +11,7 @@ import flet as ft
 
 from core.app_state import AppState
 from core.auth import verify_password
+from ui.util import responsive_width
 
 
 def build_login_screen(
@@ -19,8 +20,9 @@ def build_login_screen(
     on_success: Callable[[dict, bool], None],
     remembered_username: str = "",
 ) -> ft.Control:
-    username_field = ft.TextField(label="Kullanıcı Adı", value=remembered_username, width=320, autofocus=not remembered_username)
-    password_field = ft.TextField(label="Şifre", width=320, password=True, can_reveal_password=True, autofocus=bool(remembered_username))
+    w = responsive_width(page, 320)
+    username_field = ft.TextField(label="Kullanıcı Adı", value=remembered_username, width=w, autofocus=not remembered_username)
+    password_field = ft.TextField(label="Şifre", width=w, password=True, can_reveal_password=True, autofocus=bool(remembered_username))
     remember_checkbox = ft.Checkbox(label="Beni Hatırla", value=bool(remembered_username))
     error_text = ft.Text("", color=ft.Colors.RED)
 

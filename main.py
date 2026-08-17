@@ -30,6 +30,7 @@ from ui.page_rapor import RaporPage
 from ui.page_satislar import SatislarPage
 from ui.profile_selector import build_profile_selector
 from ui.theme import apply_theme
+from ui.util import responsive_width
 
 # Üst sekme çubuğundaki her sayfa için ikon — sadece görsel, PAGE_LABELS'ın
 # (core/models.py, PySide6 sürümüyle paylaşılan) yanına Flet'e özgü bir
@@ -51,6 +52,11 @@ async def _load_settings_with_retry(prefs: ft.SharedPreferences, attempts: int =
             last_exc = exc
     assert last_exc is not None
     raise last_exc
+
+
+_THEME_CYCLE = ["dark", "light", "system"]
+_THEME_ICONS = {"dark": ft.Icons.DARK_MODE, "light": ft.Icons.LIGHT_MODE, "system": ft.Icons.BRIGHTNESS_AUTO}
+_THEME_LABELS = {"dark": "Koyu Tema", "light": "Açık Tema", "system": "Sistem Teması"}
 
 
 def _center_screen(page: ft.Page) -> None:
@@ -290,6 +296,15 @@ def _show_main_shell(
             on_saved=lambda: _show_main_shell(page, state, role_keys, prefs, settings, current_user=current_user),
         ).open()
 
+    def do_toggle_theme(e) -> None:
+        current = settings.theme_mode if settings.theme_mode in _THEME_CYCLE else "dark"
+        settings.theme_mode = _THEME_CYCLE[(_THEME_CYCLE.index(current) + 1) % len(_THEME_CYCLE)]
+        apply_theme(page, settings.theme_mode, settings.accent_color)
+        theme_btn.icon = _THEME_ICONS[settings.theme_mode]
+        theme_btn.tooltip = _THEME_LABELS[settings.theme_mode]
+        page.update()
+        page.run_task(save_settings, prefs, settings)
+
     # Not: yeni Flet sürümünde ft.Tab sadece başlığı temsil ediyor — içerik
     # ft.TabBarView ile eşleştiriliyor (Tabs'ın kendi kabul ettiği yapı).
     page_bodies: list[ft.Control] = []
@@ -337,13 +352,24 @@ def _show_main_shell(
         ),
     )
 
+    # Telefon genişliğinde (page.width güvenilir şekilde doluyor — bkz.
+    # ui/util.py::responsive_width) başlık metni + tam kimlik rozeti + tüm
+    # butonlar asla yan yana sığmıyordu, header'ın görünmeyen kısmı yatay
+    # kaydırmaya kalıyordu (keşfedilmesi zor, gerçek bir telefon genişliğinde
+    # test edilerek bulundu). Dar ekranda başlık metni gizleniyor, kimlik
+    # rozeti sadece isme, "Çıkış Yap" da simgeye iniyor — hiçbir işlev
+    # kaybolmuyor, sadece yer kazanılıyor.
+    is_narrow = bool(page.width and page.width < 520)
+
     identity_chip: ft.Control
     if current_user:
+        chip_text = current_user.get("name") or "" if is_narrow else f"{current_user.get('name')} — {info.label}"
         identity_chip = ft.Container(
-            content=ft.Text(f"{current_user.get('name')} — {info.label}", color=info.color, weight=ft.FontWeight.BOLD),
+            content=ft.Text(chip_text, color=info.color, weight=ft.FontWeight.BOLD),
             bgcolor=ft.Colors.with_opacity(0.15, info.color),
             border_radius=8,
             padding=ft.Padding(10, 3, 10, 3),
+            tooltip=f"{current_user.get('name')} — {info.label}" if is_narrow else None,
         )
     else:
         identity_chip = ft.Container(
@@ -356,15 +382,46 @@ def _show_main_shell(
     # Hesap-tabanlı mod (current_user var): "Rol Değiştir" yerine "Çıkış
     # Yap" — rol artık kullanıcı hesabına bağlı, serbestçe değiştirilmiyor.
     # Eski serbest-rol modunda (current_user yok) davranış aynı kalıyor.
-    account_action = (
-        ft.OutlinedButton("Çıkış Yap", icon=ft.Icons.LOGOUT, on_click=do_logout)
-        if current_user
-        else ft.OutlinedButton("Rol Değiştir", icon=ft.Icons.SWAP_HORIZ, on_click=change_profile)
+    if current_user:
+        account_action = (
+            ft.IconButton(icon=ft.Icons.LOGOUT, tooltip="Çıkış Yap", on_click=do_logout)
+            if is_narrow
+            else ft.OutlinedButton("Çıkış Yap", icon=ft.Icons.LOGOUT, on_click=do_logout)
+        )
+    else:
+        account_action = (
+            ft.IconButton(icon=ft.Icons.SWAP_HORIZ, tooltip="Rol Değiştir", on_click=change_profile)
+            if is_narrow
+            else ft.OutlinedButton("Rol Değiştir", icon=ft.Icons.SWAP_HORIZ, on_click=change_profile)
+        )
+
+    # Telefon genişliğinde 6-7 metinli buton hiç sığmıyordu (yatay kaydırmaya
+    # mecbur kalıyordu — kullanılabilir ama keşfedilmesi zor). Şimdi sadece
+    # en sık kullanılanlar (senkron, tema) simge-buton olarak her zaman
+    # görünür kalıyor; daha seyrek kullanılanlar tek bir "⋮" menüsünde
+    # toplanıyor. Hiçbiri kaybolmuyor, sadece daha az yer kaplıyor.
+    overflow_items = [
+        ft.PopupMenuItem(content="Barkod Eşleştirme", icon=ft.Icons.QR_CODE_2, on_click=open_barcode_mapper),
+        ft.PopupMenuItem(content="İrsaliye Arşivi", icon=ft.Icons.DESCRIPTION, on_click=open_waybill_vault),
+    ]
+    if info.is_admin:
+        overflow_items.append(
+            ft.PopupMenuItem(content="Kullanıcı Yönetimi", icon=ft.Icons.MANAGE_ACCOUNTS, on_click=open_user_management)
+        )
+        overflow_items.append(
+            ft.PopupMenuItem(content="Excel İçe Aktar", icon=ft.Icons.UPLOAD_FILE, on_click=open_excel_import)
+        )
+
+    theme_btn = ft.IconButton(
+        icon=_THEME_ICONS.get(settings.theme_mode, ft.Icons.DARK_MODE),
+        tooltip=_THEME_LABELS.get(settings.theme_mode, "Tema"),
+        on_click=do_toggle_theme,
     )
 
-    header_controls = [
-        ft.Icon(ft.Icons.INVENTORY, color=info.color, size=22),
-        ft.Text("Üretim & Satış Defteri", weight=ft.FontWeight.BOLD, size=16),
+    header_controls = [ft.Icon(ft.Icons.INVENTORY, color=info.color, size=22)]
+    if not is_narrow:
+        header_controls.append(ft.Text("Üretim & Satış Defteri", weight=ft.FontWeight.BOLD, size=16))
+    header_controls += [
         identity_chip,
         saving_text,
         ft.Container(expand=True),
@@ -373,18 +430,11 @@ def _show_main_shell(
         # bırakmadan) gri bir kutuya çeviren gerçek bir Flet/Flutter
         # bug'ı bulundu ve doğrulandı. Buton metinlerini kısa tutup dar
         # ekranlarda yatay kaydırmaya izin vermek daha güvenli.
-        ft.OutlinedButton("Senkronize Et", icon=ft.Icons.CLOUD_SYNC, on_click=do_sync_now),
-        ft.OutlinedButton("Barkod Eşleştirme", icon=ft.Icons.QR_CODE_2, on_click=open_barcode_mapper),
-        ft.OutlinedButton("İrsaliye Arşivi", icon=ft.Icons.DESCRIPTION, on_click=open_waybill_vault),
+        theme_btn,
+        ft.IconButton(icon=ft.Icons.CLOUD_SYNC, tooltip="Senkronize Et", on_click=do_sync_now),
+        ft.PopupMenuButton(icon=ft.Icons.MORE_VERT, tooltip="Diğer İşlemler", items=overflow_items),
+        account_action,
     ]
-    if info.is_admin:
-        header_controls.append(
-            ft.OutlinedButton("Kullanıcı Yönetimi", icon=ft.Icons.MANAGE_ACCOUNTS, on_click=open_user_management)
-        )
-        header_controls.append(
-            ft.OutlinedButton("Excel İçe Aktar", icon=ft.Icons.UPLOAD_FILE, on_click=open_excel_import)
-        )
-    header_controls.append(account_action)
 
     header = ft.Row(header_controls, scroll=ft.ScrollMode.AUTO)
 
@@ -403,9 +453,13 @@ def _show_first_run_settings(page: ft.Page, prefs: ft.SharedPreferences, setting
     page.controls.clear()
     _center_screen(page)
 
-    url_field = ft.TextField(label="Turso Database URL *", value=settings.turso_database_url, width=420)
-    token_field = ft.TextField(label="Turso Auth Token *", value=settings.turso_auth_token, password=True, can_reveal_password=True, width=420)
-    gemini_field = ft.TextField(label="Gemini API Key (opsiyonel)", value=settings.gemini_api_key, password=True, can_reveal_password=True, width=420)
+    # 420px sabit genişlik telefon ekranlarında (ör. 393px'lik yaygın Android
+    # genişliği) taşıyor, alan kısmen görünmez/tıklanamaz hale geliyordu —
+    # bkz. ui/util.py::responsive_width.
+    w = responsive_width(page, 420)
+    url_field = ft.TextField(label="Turso Database URL *", value=settings.turso_database_url, width=w)
+    token_field = ft.TextField(label="Turso Auth Token *", value=settings.turso_auth_token, password=True, can_reveal_password=True, width=w)
+    gemini_field = ft.TextField(label="Gemini API Key (opsiyonel)", value=settings.gemini_api_key, password=True, can_reveal_password=True, width=w)
     error_text = ft.Text("", color=ft.Colors.RED)
 
     def on_save(e) -> None:

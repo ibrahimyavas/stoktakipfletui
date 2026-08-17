@@ -413,6 +413,50 @@ onayla → tek round-trip'te yaz.**
   otomatik eşleştirme → önizleme özeti doğru → içe aktar → iki satır da
   doğru alanlarla DB'de göründü — sıfır hata.
 
+## Tema anahtarı ve telefon genişliğinde kullanılabilirlik (bu tur)
+
+Kullanıcı isteği: arayüzü güzelleştirme, dark mode seçenekleri, ve Android
+uygulamasının gerçekten kullanılabilir olması. Framework değişikliği
+(baştan başka bir GUI) değerlendirildi ama gerekmedi — sorunlar Flet'in
+kendi imkanlarıyla (Material 3 tema sistemi zaten vardı, sadece hiç
+bağlanmamıştı; responsive genişlik hesaplaması) çözüldü, mevcut/test edilmiş
+kod tabanı korunarak.
+
+- **Tema anahtarı artık gerçekten çalışıyor** — `ui/theme.py`'deki koyu/açık/
+  sistem + 7 aksan renkli altyapı bu tura kadar hiçbir düğmeye bağlı değildi
+  (`apply_theme` sadece açılışta bir kere, sabit "dark" ile çağrılıyordu).
+  Header'a bir ay/güneş simgesi eklendi — tıklandıkça Koyu → Açık → Sistem
+  arasında döngüsel geçiş yapıyor, seçim `SharedPreferences`'a kaydedilip
+  bir sonraki açılışta hatırlanıyor. Canlı olarak (sayfa yeniden yüklenmeden)
+  tüm renk paletini değiştirdiği doğrulandı.
+- **Header telefon genişliğine göre daralıyor** — önceden 6-7 metinli buton
+  hiçbir zaman 393px'lik (yaygın Android) bir ekrana sığmıyordu, görünmeyen
+  kısım yatay kaydırmaya kalıyordu (keşfedilmesi zor). Şimdi: sık kullanılan
+  işlemler (tema, senkron) simge-buton olarak kalıyor, seyrek kullanılanlar
+  (Barkod Eşleştirme, İrsaliye Arşivi, admin'de Kullanıcı Yönetimi + Excel
+  İçe Aktar) tek bir "⋮" menüsünde toplandı. `page.width < 520` olduğunda
+  (gerçek telefon genişliği) başlık metni gizleniyor, kimlik rozetesi sadece
+  isme iniyor (tam bilgi tooltip'te), "Çıkış Yap" da simgeye dönüşüyor —
+  masaüstünde davranış birebir eskisiyle aynı.
+- **12. gerçek hata bulunup düzeltildi — sabit piksel genişlikler telefonda
+  taşıyordu**: İlk-açılış Ayarlar ekranındaki alanlar `width=420` sabitti;
+  393px'lik bir ekranda bu, alanın bir kısmının görünmez/tıklanamaz hale
+  gelmesine yol açıyordu — **gerçek bir telefon genişliğinde test edilene
+  kadar fark edilmedi** (masaüstü genişliğinde tamamen normal görünüyordu).
+  Aynı sorun Giriş ekranı (320px) ve tüm diyalogların (Kullanıcı Yönetimi,
+  Excel İçe Aktar, Barkod Eşleştirme, İrsaliye Arşivi) dış kapsayıcı
+  genişliklerinde de vardı. `ui/util.py::responsive_width(page, ideal)` —
+  `page.width` ekrandan darsa değeri küçültüyor, geniş ekranda idealde
+  kalıyor — tüm bu yerlere uygulandı.
+- ✅ Gerçek bir Android telefon görünüm alanında (393×851, Pixel 5 boyutu)
+  uçtan uca doğrulandı: Ayarlar ekranı artık taşmıyor → Giriş ekranı doğru
+  ortalanıyor → Dashboard header'ı tek satıra sığıyor, hiçbir buton
+  görünmez kalmıyor → "⋮" menüsü açılıp doğru konumlanıyor → Kullanıcı
+  Yönetimi diyaloğu (alanlar + rol kutucukları) taşmadan tek sütuna
+  diziliyor. 1300px masaüstü genişliğinde hiçbir görsel regresyon yok
+  (başlık metni, tam kimlik rozetesi, "Çıkış Yap" metinli buton aynen
+  duruyor) — sıfır hata.
+
 ## Durum
 
 Artık kanıt-of-concept kapsamındaki **tüm ana ekranlar + hesap/giriş

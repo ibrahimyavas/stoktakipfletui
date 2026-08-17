@@ -14,7 +14,7 @@ import flet as ft
 from core.app_state import AppState
 from core.auth import hash_password
 from core.models import PROFILES, compute_effective_access, roles_from_field, roles_to_field
-from ui.util import is_mounted
+from ui.util import is_mounted, responsive_width
 
 
 def _new_id() -> str:
@@ -70,7 +70,7 @@ class UserManagementDialog:
                     scroll=ft.ScrollMode.AUTO,
                     tight=True,
                 ),
-                width=560,
+                width=responsive_width(page, 560),
                 height=480,
             ),
             actions=[ft.TextButton("Kapat", on_click=self._close)],

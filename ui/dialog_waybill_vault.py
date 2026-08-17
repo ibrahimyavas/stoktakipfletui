@@ -18,7 +18,7 @@ import flet as ft
 from core.app_state import AppState
 from core.ocr import run_ocr
 from core.stock_logic import format_date_tr, get_today_date_string
-from ui.util import is_mounted
+from ui.util import is_mounted, responsive_width
 
 
 def _new_id() -> str:
@@ -114,7 +114,7 @@ class WaybillVaultDialog:
         self.dialog = ft.AlertDialog(
             modal=True,
             title=ft.Text("İrsaliye Arşivi"),
-            content=ft.Container(self.tabs, width=560, height=520),
+            content=ft.Container(self.tabs, width=responsive_width(page, 560), height=520),
             actions=[ft.TextButton("Kapat", on_click=self._close)],
         )
         self._refresh_list()

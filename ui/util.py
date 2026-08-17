@@ -19,3 +19,15 @@ def is_mounted(control: ft.Control) -> bool:
         return control.page is not None
     except RuntimeError:
         return False
+
+
+def responsive_width(page: ft.Page | None, ideal: int, margin: int = 32, minimum: int = 240) -> int:
+    """Form alanları / diyalog genişlikleri gibi sabit piksel değerlerini,
+    telefon ekranı `ideal`den darsa küçültür — masaüstünde davranış birebir
+    aynı kalır (idealde kalır). Bu olmadan ör. 420px'lik bir alan 393px'lik
+    (Android'de yaygın) bir ekranda taşıyor, alan kısmen görünmez/tıklanamaz
+    hale geliyordu — bu, gerçek bir telefon genişliğinde test edilirken
+    bulundu (bkz. README)."""
+    if page and page.width and page.width < ideal + margin:
+        return max(minimum, int(page.width - margin))
+    return ideal

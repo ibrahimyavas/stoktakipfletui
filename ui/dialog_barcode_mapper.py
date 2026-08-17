@@ -13,7 +13,7 @@ import flet as ft
 
 from core.app_state import AppState
 from core.stock_logic import calculate_ending_stock, format_number, recalculate_product_stock_chain
-from ui.util import is_mounted
+from ui.util import is_mounted, responsive_width
 
 
 def _new_id() -> str:
@@ -82,7 +82,7 @@ class BarcodeMapperDialog:
                     scroll=ft.ScrollMode.AUTO,
                     tight=True,
                 ),
-                width=600,
+                width=responsive_width(page, 600),
                 height=560,
             ),
             actions=[

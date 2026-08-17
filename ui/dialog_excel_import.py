@@ -24,7 +24,7 @@ import openpyxl
 from core.app_state import AppState
 from core.db_core import COMPANY_COLUMNS, RECORD_COLUMNS, SALE_COLUMNS
 from core.models import new_company_defaults, new_record_defaults, new_sale_defaults
-from ui.util import is_mounted
+from ui.util import is_mounted, responsive_width
 
 
 def _new_id() -> str:
@@ -166,7 +166,7 @@ class ExcelImportDialog:
 
         self.target_dropdown = ft.Dropdown(
             label="Hedef Tablo",
-            width=420,
+            width=responsive_width(page, 420),
             options=[ft.DropdownOption(key=key, text=label) for key, (label, _, _) in _TARGETS.items()],
         )
         self.file_status = ft.Text("Henüz dosya seçilmedi.", size=12, italic=True)
@@ -219,7 +219,7 @@ class ExcelImportDialog:
         self.dialog = ft.AlertDialog(
             modal=True,
             title=ft.Text("Excel / CSV İçe Aktar"),
-            content=ft.Container(self.body, width=680, height=560),
+            content=ft.Container(self.body, width=responsive_width(page, 680), height=560),
             actions=[ft.TextButton("Kapat", on_click=self._close)],
         )
 
@@ -284,7 +284,7 @@ class ExcelImportDialog:
         for header in self._headers:
             suggestion = _best_match(header, columns) or _SKIP
             dd = ft.Dropdown(
-                width=260,
+                width=responsive_width(self.page, 260, margin=140),
                 value=suggestion,
                 options=[ft.DropdownOption(key=_SKIP, text=_SKIP)]
                 + [ft.DropdownOption(key=c, text=c) for c in columns],
@@ -292,8 +292,9 @@ class ExcelImportDialog:
             self._mapping_dropdowns[header] = dd
             rows.append(
                 ft.Row(
-                    [ft.Container(ft.Text(header, size=12), width=220), ft.Icon(ft.Icons.ARROW_FORWARD, size=14), dd],
+                    [ft.Container(ft.Text(header, size=12), width=responsive_width(self.page, 220, margin=180)), ft.Icon(ft.Icons.ARROW_FORWARD, size=14), dd],
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    wrap=True,
                 )
             )
         self.mapping_column.controls = rows
