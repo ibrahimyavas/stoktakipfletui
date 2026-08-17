@@ -2,5 +2,5 @@ flet>=0.86,<0.87
 libsql-client>=0.3.1,<0.4
 requests>=2.31,<3
 qrcode[pil]>=8.0,<9
-Pillow>=10.0,<12
+Pillow>=10.0,<13
 openpyxl>=3.1,<4
